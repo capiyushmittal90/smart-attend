@@ -50,6 +50,7 @@ const staffSchema = new mongoose.Schema({
     dept: { type: String, required: true },
     email: { type: String, required: true, lowercase: true },
     password: { type: String, default: '1234' },
+    baseSalary: { type: Number, default: 0 },
     shift: { type: String, default: 'General' },
     active: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now }
@@ -104,6 +105,10 @@ const settingsSchema = new mongoose.Schema({
         startTime: { type: String },
         endTime: { type: String },
         graceMinutes: { type: Number, default: 15 }
+    }],
+    holidays: [{
+        date: { type: String }, // format YYYY-MM-DD
+        name: { type: String }
     }]
 });
 const Settings = mongoose.model('Settings', settingsSchema);
@@ -234,7 +239,7 @@ app.get('/api/staff', adminAuth, async (req, res) => {
 });
 
 app.post('/api/staff', adminAuth, async (req, res) => {
-    const { code, name, dept, email, shift, password } = req.body;
+    const { code, name, dept, email, shift, password, baseSalary } = req.body;
     if (!code || !name || !dept || !email) return res.status(400).json({ error: 'All fields required' });
     const exists = await Staff.findOne({ code: code.toUpperCase() });
     if (exists) return res.status(409).json({ error: 'Employee code already exists' });
@@ -244,7 +249,8 @@ app.post('/api/staff', adminAuth, async (req, res) => {
         dept, 
         email: email.toLowerCase(), 
         shift: shift || 'General',
-        password: password || '1234'
+        password: password || '1234',
+        baseSalary: Number(baseSalary) || 0
     });
     res.json({ success: true, staff });
 });
@@ -264,8 +270,14 @@ app.post('/api/staff/bulk', adminAuth, async (req, res) => {
 });
 
 app.put('/api/staff/:id', adminAuth, async (req, res) => {
-    const { name, dept, email, shift } = req.body;
-    const staff = await Staff.findByIdAndUpdate(req.params.id, { name, dept, email: email?.toLowerCase(), shift }, { new: true });
+    const { name, dept, email, shift, baseSalary } = req.body;
+    const staff = await Staff.findByIdAndUpdate(req.params.id, { 
+        name, 
+        dept, 
+        email: email?.toLowerCase(), 
+        shift,
+        baseSalary: Number(baseSalary) || 0
+    }, { new: true });
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
     res.json({ success: true, staff });
 });
@@ -717,6 +729,126 @@ app.post('/api/send-otp', async (req, res) => {
         res.json({ success: true, message: `OTP sent to ${employeeEmail}` });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to send email.' });
+    }
+});
+
+// ============ SETTINGS (HOLIDAYS) ============
+app.post('/api/settings/holidays', adminAuth, async (req, res) => {
+    const { date, name } = req.body;
+    if (!date || !name) return res.status(400).json({ error: 'Date and Name required' });
+    let settings = await Settings.findOne({ key: 'global' });
+    if (!settings) settings = await Settings.create({ key: 'global' });
+    
+    if (!settings.holidays) settings.holidays = [];
+    if (!settings.holidays.find(h => h.date === date)) {
+        settings.holidays.push({ date, name });
+        await settings.save();
+    }
+    res.json({ success: true, holidays: settings.holidays });
+});
+
+app.delete('/api/settings/holidays/:date', adminAuth, async (req, res) => {
+    let settings = await Settings.findOne({ key: 'global' });
+    if (settings && settings.holidays) {
+        settings.holidays = settings.holidays.filter(h => h.date !== req.params.date);
+        await settings.save();
+    }
+    res.json({ success: true, holidays: settings ? settings.holidays : [] });
+});
+
+// ============ PAYROLL CALCULATION ENGINE ============
+app.get('/api/payroll/calculate/:month', adminAuth, async (req, res) => {
+    try {
+        const { month } = req.params; // format: YYYY-MM
+        const [year, m] = month.split('-').map(Number);
+        if (!year || !m) return res.status(400).json({ error: 'Invalid month (YYYY-MM)' });
+
+        const staffList = await Staff.find({ active: true });
+        const totalDays = new Date(year, m, 0).getDate();
+        
+        // Count Sundays
+        let sundays = 0;
+        for (let day = 1; day <= totalDays; day++) {
+            if (new Date(year, m - 1, day).getDay() === 0) sundays++;
+        }
+
+        // Count Holidays (Matching YYYY-MM)
+        const settings = await Settings.findOne({ key: 'global' });
+        let holidaysCount = 0;
+        if (settings && settings.holidays) {
+            settings.holidays.forEach(h => {
+                if (h.date.startsWith(month)) holidaysCount++;
+            });
+        }
+        
+        const allowedLeaves = 1; // Standard config
+        const regexDate = new RegExp(`^[0-3][0-9]/${m.toString().padStart(2, '0')}/${year}$`);
+        
+        const payrollData = [];
+
+        // Parallel log queries using regex for the whole month
+        const [logsIn, logsOut, approvedLeaves] = await Promise.all([
+            AttendanceLog.find({ type: 'IN', date: regexDate }),
+            AttendanceLog.find({ type: 'OUT', date: regexDate }),
+            LeaveRequest.find({ status: 'approved', date: regexDate }) // format depends on how user sets leave date... Wait, leave date in DB is string? Yes.
+        ]);
+
+        for (const staff of staffList) {
+            const baseSalary = staff.baseSalary || 0;
+            const staffLogsIn = logsIn.filter(l => l.staffId.toString() === staff._id.toString());
+            const staffLogsOut = logsOut.filter(l => l.staffId.toString() === staff._id.toString());
+            
+            let actualDaysWorked = 0;
+            let lateDaysCount = 0;
+
+            staffLogsIn.forEach(inLog => {
+                const outLog = staffLogsOut.find(o => o.date === inLog.date);
+                if (inLog.status === 'LATE') lateDaysCount++;
+                
+                if (outLog && outLog.status) {
+                    const match = outLog.status.match(/(\d+)h/);
+                    if (match) {
+                        const h = parseInt(match[1]);
+                        if (h >= 8) actualDaysWorked += 1;
+                        else if (h >= 4) actualDaysWorked += 0.5;
+                        else actualDaysWorked += 0;
+                    }
+                } else {
+                    // Missed checkout default fallback
+                    actualDaysWorked += 0.5;
+                }
+            });
+
+            // Find leaves
+            const leavesTaken = approvedLeaves.filter(l => l.staffId.toString() === staff._id.toString()).length;
+
+            // Simple Gross Calculation: (Base / TotalMonthDays) * PaidDays
+            let paidDays = actualDaysWorked + sundays + holidaysCount + allowedLeaves;
+            if (paidDays > totalDays) paidDays = totalDays; // Cap
+
+            const salaryAmount = Math.round((baseSalary / totalDays) * paidDays);
+
+            payrollData.push({
+                staffId: staff._id,
+                code: staff.code,
+                name: staff.name,
+                dept: staff.dept,
+                baseSalary,
+                totalDays,
+                actualDaysWorked,
+                lateDaysCount,
+                leavesTaken,
+                paidDays,
+                sundays,
+                holidaysCount,
+                calculatedSalary: salaryAmount
+            });
+        }
+
+        res.json({ success: true, month, year, totalDays, sundays, holidaysCount, records: payrollData });
+    } catch (err) {
+        console.error('Payroll Engine Error:', err);
+        res.status(500).json({ error: 'Failed to calculate payroll' });
     }
 });
 

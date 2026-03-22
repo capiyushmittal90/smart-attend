@@ -271,23 +271,47 @@ function fetchLocation(badgeId) {
         badge.innerHTML = '<span class="pulse-dot"></span> Geolocation not supported';
         return;
     }
+    
+    // Attempt 1: Browser GPS
     navigator.geolocation.getCurrentPosition(
         async (pos) => {
             const { latitude, longitude } = pos.coords;
             currentCoords = { lat: latitude, lng: longitude };
+            
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`, { headers: { 'Accept-Language': 'en' } });
+                // Primary: OpenStreetMap Nominatim for exact street address
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`);
                 const data = await res.json();
-                currentLocation = data.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-            } catch { currentLocation = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`; }
-            badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
+                if (data && data.display_name) {
+                    // Extract exactly what's needed for a clean short address if available, else use full
+                    currentLocation = data.display_name;
+                } else {
+                    throw new Error("Nominatim failed");
+                }
+            } catch (err1) { 
+                try {
+                    // Fallback: BigDataCloud for City/State level
+                    const res2 = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+                    const data2 = await res2.json();
+                    if (data2.locality) {
+                        currentLocation = `${data2.locality}, ${data2.principalSubdivision}, ${data2.countryName}`;
+                    } else {
+                        throw new Error("BigDataCloud failed");
+                    }
+                } catch (err2) {
+                    // Final Fallback: Raw Coordinates
+                    currentLocation = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+                }
+            }
+            badge.innerHTML = `<span class="pulse-dot"></span> 📍 ${currentLocation.substring(0, 40)}...`;
         },
         () => {
+            // Attempt 2: IP-based Location (if GPS is denied)
             fetch('https://ipapi.co/json/').then(r => r.json()).then(d => {
                 currentIP = d.ip || null;
-                currentLocation = `${d.city || ''}, ${d.region || ''}, ${d.country_name || ''}`;
+                currentLocation = `${d.city || 'Unknown City'}, ${d.region || ''}, ${d.country_name || ''}`;
                 if (d.latitude && d.longitude) currentCoords = { lat: d.latitude, lng: d.longitude };
-                badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
+                badge.innerHTML = `<span class="pulse-dot"></span> 🌐 ${currentLocation}`;
             }).catch(() => { badge.innerHTML = '<span class="pulse-dot"></span> Could not determine location'; });
         },
         { enableHighAccuracy: true, timeout: 10000 }
@@ -448,7 +472,7 @@ async function loadStaffList() {
         container.innerHTML = staff.map((emp, i) => `
             <div class="staff-card" data-id="${emp._id}">
                 <div class="card-actions">
-                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}')" title="Edit">✏️</button>
+                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}', ${emp.baseSalary || 0})" title="Edit">✏️</button>
                     <button class="btn-card-action delete" onclick="removeStaff('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')" title="Remove">✕</button>
                 </div>
                 <div class="emp-code">${emp.code}</div>
@@ -471,6 +495,7 @@ async function addStaff(e) {
     const dept = document.getElementById('emp-dept').value.trim();
     const email = document.getElementById('emp-email').value.trim();
     const password = document.getElementById('emp-password').value.trim();
+    const baseSalary = document.getElementById('emp-salary').value.trim();
     const shift = document.getElementById('emp-shift-select')?.value || 'General';
     
     if (!code || !name || !dept || !email) { toast('All fields required', 'warning'); return false; }
@@ -479,7 +504,7 @@ async function addStaff(e) {
     btn.disabled = true; btn.textContent = '⏳ Adding…';
 
     try {
-        await api('POST', '/api/staff', { code, name, dept, email, password, shift });
+        await api('POST', '/api/staff', { code, name, dept, email, password, baseSalary, shift });
         toast(`${name} added ✓`, 'success');
         document.getElementById('staff-form').reset();
         loadStaffList();
@@ -500,13 +525,14 @@ async function removeStaff(id, name) {
     } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
-function openEditModal(id, code, name, dept, email, shift) {
+function openEditModal(id, code, name, dept, email, shift, baseSalary) {
     document.getElementById('edit-id').value = id;
     document.getElementById('edit-code').value = code;
     document.getElementById('edit-name').value = name;
     document.getElementById('edit-dept').value = dept;
     document.getElementById('edit-email').value = email;
     document.getElementById('edit-shift').value = shift || 'General';
+    document.getElementById('edit-salary').value = baseSalary || 0;
     document.getElementById('edit-modal').style.display = 'flex';
 }
 function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
@@ -517,10 +543,11 @@ async function saveEdit() {
     const dept = document.getElementById('edit-dept').value.trim();
     const email = document.getElementById('edit-email').value.trim();
     const shift = document.getElementById('edit-shift').value;
+    const baseSalary = document.getElementById('edit-salary').value;
     if (!name || !dept || !email) { toast('All fields required', 'warning'); return; }
 
     try {
-        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift });
+        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift, baseSalary });
         toast(`${name} updated ✓`, 'success');
         closeEditModal(); loadStaffList();
     } catch (err) { toast('❌ ' + err.message, 'error'); }
@@ -838,7 +865,50 @@ async function loadSettingsUI() {
         document.getElementById('setting-geofence').value = s.geofenceRadius;
         // Shifts
         renderShiftsUI(s.shifts || []);
+        // Holidays
+        renderHolidaysUI(s.holidays || []);
     } catch (err) { console.error(err); }
+}
+
+function renderHolidaysUI(holidays) {
+    const list = document.getElementById('holidays-list');
+    if (!list) return;
+    if (holidays.length === 0) {
+        list.innerHTML = '<p class="empty-msg" style="margin:5px 0;">No holidays configured.</p>';
+        return;
+    }
+    // Sort by date ascending
+    holidays.sort((a,b) => new Date(a.date) - new Date(b.date));
+    list.innerHTML = holidays.map(h => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#f4f7f9; padding:8px 12px; border-radius:6px; border-left: 3px solid #C8A951;">
+            <div>
+                <strong>${h.date}</strong> — ${h.name}
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeHoliday('${h.date}', '${h.name}')">✕</button>
+        </div>
+    `).join('');
+}
+
+async function addHoliday() {
+    const date = document.getElementById('holiday-date').value;
+    const name = document.getElementById('holiday-name').value.trim();
+    if (!date || !name) { toast('Enter both holiday Date and Name', 'warning'); return; }
+    try {
+        const data = await api('POST', '/api/settings/holidays', { date, name });
+        toast('Holiday added ✓', 'success');
+        document.getElementById('holiday-date').value = '';
+        document.getElementById('holiday-name').value = '';
+        renderHolidaysUI(data.holidays);
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
+}
+
+async function removeHoliday(date, name) {
+    if (!confirm(`Remove ${name} from holidays?`)) return;
+    try {
+        const data = await api('DELETE', `/api/settings/holidays/${date}`);
+        toast('Holiday removed', 'info');
+        renderHolidaysUI(data.holidays);
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
 function renderShiftsUI(shifts) {
@@ -982,4 +1052,77 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initDragDrop();
     startGeofenceWatch();
+
+    // Check query params for autologin
+    const params = new URLSearchParams(location.search);
+    if (params.get('admin') === '1') {
+        showScreen('screen-admin-login');
+        const token = localStorage.getItem('sa_admin_token');
+        if (token) {
+            authToken = token;
+            currentUser = JSON.parse(localStorage.getItem('sa_user'));
+            showScreen('screen-admin-portal');
+            initAdminPortal();
+        }
+    }
 });
+
+// ============ PAYROLL GENERATOR ============
+function openSalaryModal() {
+    document.getElementById('modal-salary').style.display = 'flex';
+    document.getElementById('payroll-table').style.display = 'none';
+    document.getElementById('payroll-stats').style.display = 'none';
+    
+    // Set default month to current
+    const picker = document.getElementById('payroll-month-picker');
+    const now = new Date();
+    picker.value = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+}
+
+async function generateSalaryReport() {
+    const month = document.getElementById('payroll-month-picker').value;
+    if (!month) { toast('Please select a month', 'warning'); return; }
+    
+    const loading = document.getElementById('payroll-loading');
+    const table = document.getElementById('payroll-table');
+    const tbody = document.getElementById('payroll-tbody');
+    const stats = document.getElementById('payroll-stats');
+    
+    loading.style.display = 'block';
+    table.style.display = 'none';
+    stats.style.display = 'none';
+    tbody.innerHTML = '';
+    
+    try {
+        const data = await api('GET', `/api/payroll/calculate/${month}`);
+        
+        // Update stats
+        document.getElementById('py-total').textContent = data.totalDays;
+        document.getElementById('py-sun').textContent = data.sundays;
+        document.getElementById('py-hol').textContent = data.holidaysCount;
+        stats.style.display = 'flex';
+        
+        if (data.records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No active staff members found.</td></tr>';
+        } else {
+            tbody.innerHTML = data.records.map(r => `
+                <tr>
+                    <td><strong>${r.code}</strong></td>
+                    <td>${r.name}<br><small style="color:#666">${r.dept}</small></td>
+                    <td>₹ ${r.baseSalary.toLocaleString('en-IN')}</td>
+                    <td>${r.actualDaysWorked} d</td>
+                    <td><span style="color:#dc3545">${r.lateDaysCount} late</span></td>
+                    <td>${r.leavesTaken} d</td>
+                    <td><strong>${r.paidDays} d</strong></td>
+                    <td style="font-size:16px; color:#C8A951; font-weight:800;">₹ ${r.calculatedSalary.toLocaleString('en-IN')}</td>
+                </tr>
+            `).join('');
+        }
+        
+        table.style.display = 'table';
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        loading.style.display = 'none';
+    }
+}

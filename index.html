@@ -49,6 +49,10 @@
                 <input type="email" id="edit-email" class="form-input">
             </div>
             <div class="form-group">
+                <label class="form-label">Monthly Salary (₹)</label>
+                <input type="number" id="edit-salary" class="form-input">
+            </div>
+            <div class="form-group">
                 <label class="form-label">Shift</label>
                 <input type="text" id="edit-shift" class="form-input" placeholder="General">
             </div>
@@ -390,6 +394,11 @@
                                         placeholder="e.g. 1234" required>
                                 </div>
                                 <div class="form-group">
+                                    <label class="form-label">Monthly Salary (₹)</label>
+                                    <input type="number" id="emp-salary" class="form-input"
+                                        placeholder="e.g. 25000">
+                                </div>
+                                <div class="form-group">
                                     <label class="form-label">Shift</label>
                                     <select id="emp-shift-select" class="form-select">
                                         <option value="General">General</option>
@@ -487,7 +496,8 @@
                         <button class="btn btn-danger btn-sm" onclick="exportPDF()">📄 Export PDF</button>
                         <div class="payroll-export">
                             <input type="month" id="payroll-month" class="form-input">
-                            <button class="btn btn-accent btn-sm" onclick="exportPayroll()">💰 Payroll CSV</button>
+                            <button class="btn btn-outline-dark btn-sm" onclick="exportPayroll()">📥 Payroll CSV</button>
+                            <button class="btn btn-accent btn-sm" onclick="openSalaryModal()">💰 Generate Salary Slip</button>
                         </div>
                     </div>
                     <div class="table-wrapper">
@@ -565,8 +575,20 @@
                         <button class="btn btn-outline-dark btn-sm" onclick="addShiftRow()"
                             style="margin-top:12px;">+ Add Shift</button>
                     </div>
-                    <button class="btn btn-primary" onclick="saveSettings()" style="margin-top: 16px;">💾 Save All
-                        Settings</button>
+
+                    <!-- Holiday Calendar Management -->
+                    <div class="form-card glass" style="margin-top: 20px;">
+                        <h3>📅 Yearly Holiday Calendar</h3>
+                        <p style="font-size:12px;color:#666;margin-top:0;">These days will be fully paid when generating salary.</p>
+                        <div style="display:flex; gap:10px; margin-bottom: 12px;">
+                            <input type="date" id="holiday-date" class="form-input" style="flex:1;">
+                            <input type="text" id="holiday-name" class="form-input" placeholder="e.g. Diwali" style="flex:2;">
+                            <button class="btn btn-primary" onclick="addHoliday()">+ Add</button>
+                        </div>
+                        <div id="holidays-list" style="display:grid; gap:8px;"></div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveSettings()" style="margin-top: 20px;">💾 Save Core Settings</button>
                 </div>
 
                 <!-- ======== TAB: MANAGE ADMINS ======== -->
@@ -606,6 +628,48 @@
             </main>
         </div>
     </section>
+
+    <!-- ============ MODAL: SALARY / PAYROLL VIEW ============ -->
+    <div id="modal-salary" class="modal-overlay" style="display:none;">
+        <div class="modal-content glass" style="max-width: 900px; padding: 24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+                <h2 style="margin:0;">💰 Smart Payroll Generator</h2>
+                <button class="btn-ghost" onclick="document.getElementById('modal-salary').style.display='none'">✖</button>
+            </div>
+            <div style="display:flex; gap:12px; margin-bottom: 20px; align-items:flex-end;">
+                <div>
+                    <label class="form-label">Select Month</label>
+                    <input type="month" id="payroll-month-picker" class="form-input">
+                </div>
+                <button class="btn btn-primary" onclick="generateSalaryReport()">Calculate Salary</button>
+            </div>
+
+            <div id="payroll-stats" style="display:none; gap:16px; margin-bottom: 16px; font-size:14px;">
+                <div style="background:#f4f7f9; padding:8px 16px; border-radius:6px; color:#333;">Total Days: <strong id="py-total">30</strong></div>
+                <div style="background:#f4f7f9; padding:8px 16px; border-radius:6px; color:#333;">Sundays: <strong id="py-sun">4</strong></div>
+                <div style="background:#f4f7f9; padding:8px 16px; border-radius:6px; color:#333;">Office Holidays: <strong id="py-hol">1</strong></div>
+            </div>
+
+            <div class="table-wrapper" style="max-height: 400px; overflow-y:auto;">
+                <table class="att-table" id="payroll-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Employee</th>
+                            <th>Base Sal. (₹)</th>
+                            <th>Work Days</th>
+                            <th>Late/Abs.</th>
+                            <th>Leaves</th>
+                            <th>Payable Days</th>
+                            <th>🎯 Final Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody id="payroll-tbody"></tbody>
+                </table>
+            </div>
+            <p id="payroll-loading" style="text-align:center; display:none;">Calculating strictly by 8-hour metrics...</p>
+        </div>
+    </div>
 
     <script src="app.js"></script>
     <script>
