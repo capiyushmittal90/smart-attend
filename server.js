@@ -49,6 +49,7 @@ const staffSchema = new mongoose.Schema({
     name: { type: String, required: true },
     dept: { type: String, required: true },
     email: { type: String, required: true, lowercase: true },
+    password: { type: String, default: '1234' },
     shift: { type: String, default: 'General' },
     active: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now }
@@ -204,68 +205,20 @@ app.post('/api/auth/admin-login', async (req, res) => {
     res.json({ success: true, token, admin: { name: admin.name, email: admin.email, role: admin.role } });
 });
 
-// Employee Login — Send OTP
+// Employee Login — Password based
 app.post('/api/auth/employee-login', async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const staff = await Staff.findOne({ email: email.toLowerCase(), active: true });
     if (!staff) return res.status(404).json({ error: 'Employee not found. Contact admin.' });
 
-    const otp = String(Math.floor(1000 + Math.random() * 9000));
-    otpStore.set(email.toLowerCase(), {
-        otp,
-        expires: Date.now() + 5 * 60 * 1000, // 5 min expiry
-        staffId: staff._id
-    });
-
-    try {
-        await transporter.sendMail({
-            from: `"${SENDER_NAME}" <${SMTP_USER}>`,
-            to: staff.email,
-            subject: `BookMyCA Smart Attend OTP — ${staff.name}`,
-            html: `
-                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; border: 1px solid #e0e6ed; border-radius: 12px; overflow: hidden;">
-                    <div style="background: linear-gradient(135deg, #0B3C5D, #072a42); padding: 28px 24px; text-align: center;">
-                        <h1 style="color: #C8A951; margin: 0; font-size: 22px;">📋 BookMyCA Smart Attend</h1>
-                        <p style="color: rgba(255,255,255,0.6); margin: 6px 0 0; font-size: 13px;">Employee Verification Code</p>
-                    </div>
-                    <div style="padding: 32px 24px; text-align: center; background: #fff;">
-                        <p style="color: #333; font-size: 15px; margin: 0 0 8px;">Hello <strong>${staff.name}</strong>,</p>
-                        <p style="color: #666; font-size: 14px; margin: 0 0 24px;">Use the code below to verify your attendance:</p>
-                        <div style="background: #F4F7F9; border: 2px dashed #C8A951; border-radius: 10px; padding: 20px; display: inline-block;">
-                            <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #0B3C5D;">${otp}</span>
-                        </div>
-                        <p style="color: #999; font-size: 12px; margin: 24px 0 0;">This code expires in 5 minutes.</p>
-                    </div>
-                    <div style="background: #F4F7F9; padding: 14px; text-align: center; border-top: 1px solid #e8ecf1;">
-                        <p style="color: #aaa; font-size: 11px; margin: 0;">Automated email from BookMyCA Smart Attend Suite.</p>
-                    </div>
-                </div>`
-        });
-        console.log(`📧 OTP ${otp} sent to ${staff.email} (${staff.name})`);
-        res.json({ success: true, message: `OTP sent to ${staff.email}`, employeeName: staff.name });
-    } catch (err) {
-        console.error('❌ Email failed:', err.message);
-        res.status(500).json({ error: 'Failed to send OTP email' });
+    // Fallback to '1234' if the database document was created before the password field existed
+    const validPassword = staff.password || '1234';
+    if (password !== validPassword) {
+        return res.status(401).json({ error: 'Invalid password' });
     }
-});
 
-// Employee Verify OTP
-app.post('/api/auth/verify-otp', async (req, res) => {
-    const { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
-
-    const record = otpStore.get(email.toLowerCase());
-    if (!record) return res.status(400).json({ error: 'OTP not found. Request a new one.' });
-    if (Date.now() > record.expires) {
-        otpStore.delete(email.toLowerCase());
-        return res.status(400).json({ error: 'OTP expired. Request a new one.' });
-    }
-    if (record.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
-
-    otpStore.delete(email.toLowerCase());
-    const staff = await Staff.findById(record.staffId);
     const token = jwt.sign(
         { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, shift: staff.shift, type: 'employee' },
         JWT_SECRET, { expiresIn: '12h' }
@@ -281,11 +234,18 @@ app.get('/api/staff', adminAuth, async (req, res) => {
 });
 
 app.post('/api/staff', adminAuth, async (req, res) => {
-    const { code, name, dept, email, shift } = req.body;
+    const { code, name, dept, email, shift, password } = req.body;
     if (!code || !name || !dept || !email) return res.status(400).json({ error: 'All fields required' });
     const exists = await Staff.findOne({ code: code.toUpperCase() });
     if (exists) return res.status(409).json({ error: 'Employee code already exists' });
-    const staff = await Staff.create({ code: code.toUpperCase(), name, dept, email: email.toLowerCase(), shift: shift || 'General' });
+    const staff = await Staff.create({ 
+        code: code.toUpperCase(), 
+        name, 
+        dept, 
+        email: email.toLowerCase(), 
+        shift: shift || 'General',
+        password: password || '1234'
+    });
     res.json({ success: true, staff });
 });
 

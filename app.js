@@ -62,34 +62,21 @@ function showScreen(id) {
 }
 
 // ============ EMPLOYEE AUTH ============
-async function empSendOTP() {
+async function empLogin(e) {
+    if (e) e.preventDefault();
     const email = document.getElementById('emp-login-email').value.trim();
-    if (!email) { toast('Please enter your email', 'warning'); return; }
-
-    const btn = document.getElementById('btn-emp-send-otp');
-    btn.disabled = true; btn.textContent = '⏳ Sending OTP…';
-
-    try {
-        const data = await api('POST', '/api/auth/employee-login', { email });
-        toast(`✅ OTP sent to ${email}`, 'success');
-        document.getElementById('emp-login-step1').style.display = 'none';
-        document.getElementById('emp-login-step2').style.display = 'block';
-        document.getElementById('emp-otp-name').textContent = data.employeeName;
-        document.getElementById('emp-otp-email-store').value = email;
-    } catch (err) {
-        toast('❌ ' + err.message, 'error');
-    } finally {
-        btn.disabled = false; btn.textContent = '📨 Send OTP';
+    const password = document.getElementById('emp-login-password').value.trim();
+    
+    if (!email || !password) { 
+        toast('Please enter both email and password', 'warning'); 
+        return; 
     }
-}
 
-async function empVerifyOTP() {
-    const email = document.getElementById('emp-otp-email-store').value;
-    const otp = document.getElementById('emp-otp-input').value.trim();
-    if (!otp) { toast('Enter the OTP', 'warning'); return; }
+    const btn = document.getElementById('btn-emp-login');
+    btn.disabled = true; btn.textContent = '⏳ Logging In…';
 
     try {
-        const data = await api('POST', '/api/auth/verify-otp', { email, otp });
+        const data = await api('POST', '/api/auth/employee-login', { email, password });
         authToken = data.token;
         currentUser = { ...data.employee, type: 'employee' };
         localStorage.setItem('sa_token', authToken);
@@ -98,6 +85,8 @@ async function empVerifyOTP() {
         showScreen('screen-emp-dashboard');
     } catch (err) {
         toast('❌ ' + err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = '👤 Log In';
     }
 }
 
@@ -481,14 +470,16 @@ async function addStaff(e) {
     const name = document.getElementById('emp-name').value.trim();
     const dept = document.getElementById('emp-dept').value.trim();
     const email = document.getElementById('emp-email').value.trim();
+    const password = document.getElementById('emp-password').value.trim();
     const shift = document.getElementById('emp-shift-select')?.value || 'General';
+    
     if (!code || !name || !dept || !email) { toast('All fields required', 'warning'); return false; }
 
     const btn = document.getElementById('btn-add-staff');
     btn.disabled = true; btn.textContent = '⏳ Adding…';
 
     try {
-        await api('POST', '/api/staff', { code, name, dept, email, shift });
+        await api('POST', '/api/staff', { code, name, dept, email, password, shift });
         toast(`${name} added ✓`, 'success');
         document.getElementById('staff-form').reset();
         loadStaffList();
