@@ -1,47 +1,34 @@
 /* =============================================
-   BookMyCA Smart Attend — Application Logic v3
-   Late Detection, Check-Out, GPS, Geofence, PWA
+   BookMyCA Smart Attend — App Logic v4.0
+   API-Based, Employee Self-Service, Dashboard
    ============================================= */
 
-// --- Configuration ---
-const ADMIN_EMAIL = "capiyushmittal90@gmail.com";
-const ADMIN_PASS = "Kittu@123*";
-const ADMIN_NAME = "Piyush Mittal";
-
-// Default settings (overridden by localStorage)
-const DEFAULT_SETTINGS = {
-    officeStartTime: '10:00',
-    graceMinutes: 15,
-    officeLat: 26.892900,
-    officeLng: 75.793900,
-    geofenceRadius: 500    // meters
-};
-
 // --- State ---
-let staffDB = JSON.parse(localStorage.getItem('smartattend_staff') || '[]');
-let attendanceLogs = JSON.parse(localStorage.getItem('smartattend_logs') || '[]');
-let settings = Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem('smartattend_settings') || '{}'));
-let currentOTP = null;
+let authToken = localStorage.getItem('sa_token') || null;
+let currentUser = JSON.parse(localStorage.getItem('sa_user') || 'null');
 let cameraStream = null;
 let currentLocation = "Fetching…";
-let currentCoords = null;    // { lat, lng }
+let currentCoords = null;
 let currentIP = null;
-let isSubmitting = false;
 let geoWatchId = null;
+let dashboardCharts = {};
 
-// ============ SCREEN MANAGEMENT ============
-function showScreen(id) {
-    stopCamera();
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    const screen = document.getElementById(id);
-    if (screen) screen.classList.add('active');
+const API = '';  // Same-origin
 
-    if (id === 'screen-checkin') initCheckin();
-    if (id === 'screen-checkout') initCheckout();
-    if (id === 'screen-admin-portal') initAdminPortal();
+// ============ HELPERS ============
+function api(method, path, body, raw) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+    const opts = { method, headers };
+    if (body) opts.body = JSON.stringify(body);
+    if (raw) return fetch(API + path, opts);
+    return fetch(API + path, opts).then(async r => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Request failed');
+        return data;
+    });
 }
 
-// ============ TOAST ============
 function toast(msg, type = 'info', duration = 3500) {
     const el = document.getElementById('toast');
     el.textContent = msg;
@@ -51,169 +38,212 @@ function toast(msg, type = 'info', duration = 3500) {
     el._timer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
-// ============ LOCAL STORAGE ============
-function saveStaff() { localStorage.setItem('smartattend_staff', JSON.stringify(staffDB)); }
-function saveLogs() { localStorage.setItem('smartattend_logs', JSON.stringify(attendanceLogs)); }
-function saveSettings() {
-    settings.officeStartTime = document.getElementById('setting-start-time').value || '10:00';
-    settings.graceMinutes = parseInt(document.getElementById('setting-grace').value) || 15;
-    const locParts = (document.getElementById('setting-office-loc').value || '').split(',');
-    if (locParts.length === 2) {
-        settings.officeLat = parseFloat(locParts[0].trim()) || 26.892900;
-        settings.officeLng = parseFloat(locParts[1].trim()) || 75.793900;
-    }
-    settings.geofenceRadius = parseInt(document.getElementById('setting-geofence').value) || 500;
-    localStorage.setItem('smartattend_settings', JSON.stringify(settings));
-    toast('Settings saved ✓', 'success');
+function getTodayStr() {
+    return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function loadSettingsUI() {
-    const s = settings;
-    document.getElementById('setting-start-time').value = s.officeStartTime;
-    document.getElementById('setting-grace').value = s.graceMinutes;
-    document.getElementById('setting-office-loc').value = `${s.officeLat}, ${s.officeLng}`;
-    document.getElementById('setting-geofence').value = s.geofenceRadius;
+function logout() {
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem('sa_token');
+    localStorage.removeItem('sa_user');
+    showScreen('screen-main');
 }
 
-// ============ STAFF CHECK-IN ============
-function initCheckin() {
-    goCheckinStep(1);
-    populateStaffSelect('staff-select');
-    currentOTP = null;
+// ============ SCREEN MANAGEMENT ============
+function showScreen(id) {
+    stopCamera();
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const screen = document.getElementById(id);
+    if (screen) screen.classList.add('active');
+
+    if (id === 'screen-admin-portal') initAdminPortal();
+    if (id === 'screen-emp-dashboard') initEmpDashboard();
 }
 
-function populateStaffSelect(selectId) {
-    const sel = document.getElementById(selectId);
-    sel.innerHTML = '';
-    if (staffDB.length === 0) {
-        sel.innerHTML = '<option disabled selected>— Add staff in Admin first —</option>';
-        return;
-    }
-    staffDB.forEach((emp, i) => {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `${emp.name}  (${emp.code})`;
-        sel.appendChild(opt);
-    });
-}
+// ============ EMPLOYEE AUTH ============
+async function empSendOTP() {
+    const email = document.getElementById('emp-login-email').value.trim();
+    if (!email) { toast('Please enter your email', 'warning'); return; }
 
-function goCheckinStep(n) {
-    document.querySelectorAll('#screen-checkin .checkin-step').forEach(s => s.classList.remove('active'));
-    const step = document.getElementById('checkin-step-' + n);
-    if (step) step.classList.add('active');
-    for (let i = 1; i <= 3; i++) {
-        const el = document.getElementById('step-' + i);
-        el.classList.remove('active', 'done');
-        if (i < n) el.classList.add('done');
-        if (i === n) el.classList.add('active');
-    }
-    if (n === 3) { startCamera('camera-feed'); fetchLocation('location-badge'); }
-    else { stopCamera(); }
-}
-
-// --- OTP ---
-async function sendOTP() {
-    if (staffDB.length === 0) { toast('No staff registered. Go to Admin Portal first.', 'warning'); return; }
-    const idx = document.getElementById('staff-select').value;
-    const emp = staffDB[idx];
-    currentOTP = String(Math.floor(1000 + Math.random() * 9000));
-
-    const btn = document.getElementById('btn-send-otp');
-    btn.disabled = true;
-    btn.textContent = '⏳ Sending OTP…';
-    toast(`Sending OTP to ${emp.email}…`, 'info', 5000);
+    const btn = document.getElementById('btn-emp-send-otp');
+    btn.disabled = true; btn.textContent = '⏳ Sending OTP…';
 
     try {
-        const res = await fetch('/api/send-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employeeName: emp.name, employeeEmail: emp.email, otp: currentOTP })
-        });
-        const data = await res.json();
-        if (data.success) {
-            toast(`✅ OTP sent successfully to ${emp.email}`, 'success', 5000);
-            goCheckinStep(2);
+        const data = await api('POST', '/api/auth/employee-login', { email });
+        toast(`✅ OTP sent to ${email}`, 'success');
+        document.getElementById('emp-login-step1').style.display = 'none';
+        document.getElementById('emp-login-step2').style.display = 'block';
+        document.getElementById('emp-otp-name').textContent = data.employeeName;
+        document.getElementById('emp-otp-email-store').value = email;
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = '📨 Send OTP';
+    }
+}
+
+async function empVerifyOTP() {
+    const email = document.getElementById('emp-otp-email-store').value;
+    const otp = document.getElementById('emp-otp-input').value.trim();
+    if (!otp) { toast('Enter the OTP', 'warning'); return; }
+
+    try {
+        const data = await api('POST', '/api/auth/verify-otp', { email, otp });
+        authToken = data.token;
+        currentUser = { ...data.employee, type: 'employee' };
+        localStorage.setItem('sa_token', authToken);
+        localStorage.setItem('sa_user', JSON.stringify(currentUser));
+        toast(`Welcome, ${currentUser.name}! ✓`, 'success');
+        showScreen('screen-emp-dashboard');
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    }
+}
+
+// ============ EMPLOYEE DASHBOARD ============
+function initEmpDashboard() {
+    if (!currentUser) { showScreen('screen-main'); return; }
+    document.getElementById('emp-welcome-name').textContent = currentUser.name;
+    document.getElementById('emp-welcome-code').textContent = currentUser.code;
+    document.getElementById('emp-welcome-dept').textContent = currentUser.dept;
+    document.getElementById('emp-welcome-shift').textContent = currentUser.shift || 'General';
+    loadEmpTodayStatus();
+    loadEmpRecentLogs();
+    loadEmpLeaves();
+}
+
+async function loadEmpTodayStatus() {
+    try {
+        const logs = await api('GET', '/api/attendance/my-logs');
+        const today = getTodayStr();
+        const todayIn = logs.find(l => l.date === today && l.type === 'IN');
+        const todayOut = logs.find(l => l.date === today && l.type === 'OUT');
+
+        const statusEl = document.getElementById('emp-today-status');
+        if (todayIn && todayOut) {
+            statusEl.innerHTML = `<span class="badge badge-out">Checked Out</span> In: ${todayIn.time} | Out: ${todayOut.time} | ${todayOut.status}`;
+            document.getElementById('btn-emp-checkin').disabled = true;
+            document.getElementById('btn-emp-checkout').disabled = true;
+        } else if (todayIn) {
+            statusEl.innerHTML = `<span class="badge badge-in">Checked In</span> at ${todayIn.time} — <span class="badge ${todayIn.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${todayIn.status}</span>`;
+            document.getElementById('btn-emp-checkin').disabled = true;
+            document.getElementById('btn-emp-checkout').disabled = false;
         } else {
-            toast(`❌ Failed to send OTP: ${data.error}`, 'error', 5000);
+            statusEl.innerHTML = `<span class="badge badge-absent">Not Checked In</span>`;
+            document.getElementById('btn-emp-checkin').disabled = false;
+            document.getElementById('btn-emp-checkout').disabled = true;
         }
     } catch (err) {
-        toast('❌ Server not reachable. Make sure the server is running.', 'error', 6000);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '📨 Send OTP to Email';
+        console.error(err);
     }
 }
 
-function verifyOTP() {
-    const entered = document.getElementById('otp-input').value.trim();
-    if (!currentOTP) { toast('Please request an OTP first.', 'warning'); return; }
-    if (entered !== currentOTP) { toast('Invalid OTP. Please try again.', 'error'); return; }
-    toast('OTP Verified ✓', 'success');
-    document.getElementById('otp-input').value = '';
-    goCheckinStep(3);
+async function loadEmpRecentLogs() {
+    try {
+        const logs = await api('GET', '/api/attendance/my-logs');
+        const tbody = document.getElementById('emp-logs-tbody');
+        if (logs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No records yet</td></tr>'; return; }
+        tbody.innerHTML = logs.slice(0, 20).map(l => `
+            <tr>
+                <td>${l.date}</td>
+                <td>${l.time}</td>
+                <td><span class="badge ${l.type === 'IN' ? 'badge-in' : 'badge-out'}">${l.type}</span></td>
+                <td>${l.type === 'IN' ? `<span class="badge ${l.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${l.status}</span>` : l.status}</td>
+                <td>${l.location ? l.location.substring(0, 40) + '…' : '—'}</td>
+            </tr>
+        `).join('');
+    } catch (err) { console.error(err); }
 }
 
-// ============ STAFF CHECK-OUT ============
-function initCheckout() {
-    goCheckoutStep(1);
-    populateStaffSelect('checkout-select');
-    updateCheckinInfo();
+async function loadEmpLeaves() {
+    try {
+        const leaves = await api('GET', '/api/leave/my-leaves');
+        const list = document.getElementById('emp-leaves-list');
+        if (leaves.length === 0) { list.innerHTML = '<p class="empty-msg">No leave requests</p>'; return; }
+        list.innerHTML = leaves.map(l => `
+            <div class="leave-card ${l.status}">
+                <div class="leave-info">
+                    <strong>${l.date}</strong> — ${l.leaveType.toUpperCase()}
+                    ${l.reason ? `<br><small>${l.reason}</small>` : ''}
+                </div>
+                <span class="badge badge-${l.status}">${l.status.toUpperCase()}</span>
+            </div>
+        `).join('');
+    } catch (err) { console.error(err); }
 }
 
-// Update checkout-select to show check-in info
-function updateCheckinInfo() {
-    const sel = document.getElementById('checkout-select');
-    sel.addEventListener('change', showCheckinInfo);
-    showCheckinInfo();
-}
+// Employee apply leave
+async function empApplyLeave() {
+    const dateInput = document.getElementById('leave-date').value;
+    if (!dateInput) { toast('Select a date', 'warning'); return; }
+    const d = new Date(dateInput);
+    const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const leaveType = document.getElementById('leave-type').value;
+    const reason = document.getElementById('leave-reason').value.trim();
 
-function showCheckinInfo() {
-    const idx = document.getElementById('checkout-select').value;
-    const badge = document.getElementById('checkin-info-badge');
-    if (!idx || !staffDB[idx]) { badge.style.display = 'none'; return; }
-    const emp = staffDB[idx];
-    const today = getTodayStr();
-    const checkinLog = attendanceLogs.find(l => l.code === emp.code && l.date === today && l.type === 'IN');
-    if (checkinLog) {
-        badge.style.display = 'block';
-        badge.innerHTML = `✅ Checked in at <strong>${checkinLog.time}</strong> — Status: <strong>${checkinLog.status}</strong>`;
-    } else {
-        badge.style.display = 'block';
-        badge.innerHTML = `⚠️ No check-in found today for ${emp.name}`;
-        badge.style.borderLeftColor = '#f39c12';
-        badge.style.color = '#e67e22';
-        badge.style.background = 'rgba(243,156,18,0.08)';
+    try {
+        await api('POST', '/api/leave/request', { date, leaveType, reason });
+        toast('Leave request submitted ✓', 'success');
+        document.getElementById('leave-date').value = '';
+        document.getElementById('leave-reason').value = '';
+        loadEmpLeaves();
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
     }
 }
 
-function goCheckoutStep(n) {
-    document.querySelectorAll('#screen-checkout .checkin-step').forEach(s => s.classList.remove('active'));
-    const step = document.getElementById('checkout-step-' + n);
-    if (step) step.classList.add('active');
-    for (let i = 1; i <= 2; i++) {
-        const el = document.getElementById('out-step-' + i);
-        el.classList.remove('active', 'done');
-        if (i < n) el.classList.add('done');
-        if (i === n) el.classList.add('active');
-    }
-    if (n === 2) { startCamera('camera-feed-out'); fetchLocation('location-badge-out'); }
-    else { stopCamera(); }
+// ============ EMPLOYEE CHECK-IN ============
+function startEmpCheckin() {
+    showScreen('screen-emp-checkin');
+    startCamera('emp-camera-feed');
+    fetchLocation('emp-location-badge');
 }
 
-function proceedCheckout() {
-    if (staffDB.length === 0) { toast('No staff registered.', 'warning'); return; }
-    const idx = document.getElementById('checkout-select').value;
-    const emp = staffDB[idx];
-    const today = getTodayStr();
+function startEmpCheckout() {
+    showScreen('screen-emp-checkout');
+    startCamera('emp-camera-feed-out');
+    fetchLocation('emp-location-badge-out');
+}
 
-    // Check if already checked out
-    const existing = attendanceLogs.find(l => l.code === emp.code && l.date === today && l.type === 'OUT');
-    if (existing) {
-        toast(`${emp.name} already checked out today at ${existing.time}.`, 'warning');
-        return;
+async function empCaptureAndMark(type) {
+    const videoId = type === 'IN' ? 'emp-camera-feed' : 'emp-camera-feed-out';
+    const canvasId = type === 'IN' ? 'emp-snapshot-canvas' : 'emp-snapshot-canvas-out';
+    const previewId = type === 'IN' ? 'emp-snapshot-preview' : 'emp-snapshot-preview-out';
+
+    const video = document.getElementById(videoId);
+    const canvas = document.getElementById(canvasId);
+    const preview = document.getElementById(previewId);
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    const photoData = canvas.toDataURL('image/jpeg', 0.75);
+
+    preview.src = photoData;
+    preview.style.display = 'block';
+    video.style.display = 'none';
+    stopCamera();
+
+    const endpoint = type === 'IN' ? '/api/attendance/checkin' : '/api/attendance/checkout';
+    try {
+        const data = await api('POST', endpoint, {
+            location: currentLocation,
+            coords: currentCoords,
+            ip: currentIP,
+            mapUrl: currentCoords ? `https://www.google.com/maps?q=${currentCoords.lat},${currentCoords.lng}` : null,
+            snapshot: photoData
+        });
+        if (type === 'IN') {
+            const statusMsg = data.status === 'LATE' ? '⚠️ LATE' : '✅ ON TIME';
+            toast(`Check-In marked! ${statusMsg}`, data.status === 'LATE' ? 'warning' : 'success');
+        } else {
+            toast(`Check-Out marked! Working: ${data.workingHours}`, 'success');
+        }
+        setTimeout(() => { showScreen('screen-emp-dashboard'); initEmpDashboard(); }, 1800);
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
     }
-
-    goCheckoutStep(2);
 }
 
 // ============ CAMERA ============
@@ -227,15 +257,12 @@ async function startCamera(videoId) {
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
         video.srcObject = cameraStream;
     } catch (err) {
-        toast('Camera access denied. Check browser permissions.', 'error');
+        toast('Camera access denied.', 'error');
     }
 }
 
 function stopCamera() {
-    if (cameraStream) {
-        cameraStream.getTracks().forEach(t => t.stop());
-        cameraStream = null;
-    }
+    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
 }
 
 // ============ LOCATION ============
@@ -250,145 +277,60 @@ function fetchLocation(badgeId) {
         badge.innerHTML = '<span class="pulse-dot"></span> Geolocation not supported';
         return;
     }
-
     navigator.geolocation.getCurrentPosition(
         async (pos) => {
             const { latitude, longitude } = pos.coords;
             currentCoords = { lat: latitude, lng: longitude };
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`, {
-                    headers: { 'Accept-Language': 'en' }
-                });
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`, { headers: { 'Accept-Language': 'en' } });
                 const data = await res.json();
                 currentLocation = data.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-            } catch {
-                currentLocation = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-            }
+            } catch { currentLocation = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`; }
             badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
         },
         () => {
-            fetch('https://ipapi.co/json/')
-                .then(r => r.json())
-                .then(d => {
-                    currentIP = d.ip || null;
-                    currentLocation = `${d.city || ''}, ${d.region || ''}, ${d.country_name || ''}`;
-                    if (d.latitude && d.longitude) {
-                        currentCoords = { lat: d.latitude, lng: d.longitude };
-                    }
-                    badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
-                })
-                .catch(() => {
-                    badge.innerHTML = '<span class="pulse-dot"></span> Could not determine location';
-                });
+            fetch('https://ipapi.co/json/').then(r => r.json()).then(d => {
+                currentIP = d.ip || null;
+                currentLocation = `${d.city || ''}, ${d.region || ''}, ${d.country_name || ''}`;
+                if (d.latitude && d.longitude) currentCoords = { lat: d.latitude, lng: d.longitude };
+                badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
+            }).catch(() => { badge.innerHTML = '<span class="pulse-dot"></span> Could not determine location'; });
         },
         { enableHighAccuracy: true, timeout: 10000 }
     );
-
-    // Also try to get IP
-    fetch('https://ipapi.co/json/')
-        .then(r => r.json())
-        .then(d => { currentIP = d.ip || null; })
-        .catch(() => { });
+    fetch('https://ipapi.co/json/').then(r => r.json()).then(d => { currentIP = d.ip || null; }).catch(() => {});
 }
 
-// ============ LATE DETECTION ============
-function getAttendanceStatus() {
-    const now = new Date();
-    const [h, m] = settings.officeStartTime.split(':').map(Number);
-    const cutoff = new Date();
-    cutoff.setHours(h, m + settings.graceMinutes, 0, 0);
-    return now <= cutoff ? 'ON TIME' : 'LATE';
-}
-
-// ============ CAPTURE & MARK (IN/OUT) ============
-function captureAndMark(type) {
-    const isCheckout = type === 'OUT';
-    const videoId = isCheckout ? 'camera-feed-out' : 'camera-feed';
-    const canvasId = isCheckout ? 'snapshot-canvas-out' : 'snapshot-canvas';
-    const previewId = isCheckout ? 'snapshot-preview-out' : 'snapshot-preview';
-    const selectId = isCheckout ? 'checkout-select' : 'staff-select';
-
-    const video = document.getElementById(videoId);
-    const canvas = document.getElementById(canvasId);
-    const preview = document.getElementById(previewId);
-
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-    const photoData = canvas.toDataURL('image/jpeg', 0.85);
-
-    preview.src = photoData;
-    preview.style.display = 'block';
-    video.style.display = 'none';
-    stopCamera();
-
-    const idx = document.getElementById(selectId).value;
-    const emp = staffDB[idx];
-
-    const now = new Date();
-    const status = type === 'IN' ? getAttendanceStatus() : '—';
-
-    const log = {
-        date: getTodayStr(),
-        time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
-        timestamp: now.getTime(),
-        type: type,
-        status: status,
-        code: emp.code,
-        name: emp.name,
-        department: emp.dept,
-        location: currentLocation,
-        coords: currentCoords ? { lat: currentCoords.lat, lng: currentCoords.lng } : null,
-        ip: currentIP,
-        mapUrl: currentCoords ? `https://www.google.com/maps?q=${currentCoords.lat},${currentCoords.lng}` : null,
-        snapshot: photoData
-    };
-
-    attendanceLogs.push(log);
-    saveLogs();
-
-    const label = type === 'IN' ? 'Check-In' : 'Check-Out';
-    const statusMsg = type === 'IN' ? ` (${status})` : '';
-    toast(`${label} marked for ${emp.name}${statusMsg}!`, status === 'LATE' ? 'warning' : 'success');
-    setTimeout(() => showScreen('screen-main'), 1800);
-}
-
-// ============ WORKING HOURS ============
-function getWorkingHours(empCode, date) {
-    const dayLogs = attendanceLogs.filter(l => l.code === empCode && l.date === date);
-    const inLog = dayLogs.find(l => l.type === 'IN');
-    const outLog = dayLogs.find(l => l.type === 'OUT');
-    if (!inLog || !outLog) return null;
-    const diff = outLog.timestamp - inLog.timestamp;
-    const hours = Math.floor(diff / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
-    return `${hours}h ${mins}m`;
-}
-
-function getTodayStr() {
-    return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-// ============ ADMIN ============
-function adminLogin() {
+// ============ ADMIN AUTH ============
+async function adminLogin() {
     const email = document.getElementById('admin-email').value.trim();
     const pass = document.getElementById('admin-pass').value;
-    if (email === ADMIN_EMAIL && pass === ADMIN_PASS) {
-        toast('Welcome, ' + ADMIN_NAME, 'success');
+    if (!email || !pass) { toast('Enter email and password', 'warning'); return; }
+
+    try {
+        const data = await api('POST', '/api/auth/admin-login', { email, password: pass });
+        authToken = data.token;
+        currentUser = { ...data.admin, type: 'admin' };
+        localStorage.setItem('sa_token', authToken);
+        localStorage.setItem('sa_user', JSON.stringify(currentUser));
+        toast('Welcome, ' + currentUser.name, 'success');
         document.getElementById('admin-email').value = '';
         document.getElementById('admin-pass').value = '';
         showScreen('screen-admin-portal');
-    } else {
-        toast('Invalid credentials. Access denied.', 'error');
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
     }
 }
 
+// ============ ADMIN PORTAL ============
 function initAdminPortal() {
-    switchTab('staff');
-    renderStaffList();
-    updateLogStats();
-    renderLogsTable();
-    loadSettingsUI();
+    if (!currentUser || currentUser.type !== 'admin') { showScreen('screen-main'); return; }
+    document.getElementById('admin-welcome-name').textContent = currentUser.name;
+    document.getElementById('admin-role-badge').textContent = currentUser.role;
+    // Show/hide superadmin-only tabs
+    const adminTab = document.getElementById('tab-btn-admins');
+    if (adminTab) adminTab.style.display = currentUser.role === 'superadmin' ? '' : 'none';
+    switchTab('dashboard');
 }
 
 function switchTab(name) {
@@ -398,85 +340,197 @@ function switchTab(name) {
     const btn = document.getElementById('tab-btn-' + name);
     if (panel) panel.classList.add('active');
     if (btn) btn.classList.add('active');
-    if (name === 'reports') { updateLogStats(); renderLogsTable(); }
-    if (name === 'settings') { loadSettingsUI(); }
+
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'staff') loadStaffList();
+    if (name === 'reports') loadReports();
+    if (name === 'leaves') loadLeaveRequests();
+    if (name === 'settings') loadSettingsUI();
+    if (name === 'admins') loadAdminList();
 }
 
-// ============ STAFF CRUD ============
-function addStaff(e) {
-    if (e) e.preventDefault();
-    if (isSubmitting) return false;
+// ============ DASHBOARD ============
+async function loadDashboard() {
+    try {
+        const d = await api('GET', '/api/attendance/dashboard');
+        document.getElementById('dash-total-staff').textContent = d.totalStaff;
+        document.getElementById('dash-present').textContent = d.presentToday;
+        document.getElementById('dash-absent').textContent = d.absentToday;
+        document.getElementById('dash-late').textContent = d.lateTodayCount;
+        document.getElementById('dash-ontime').textContent = d.onTimeCount;
+        document.getElementById('dash-leaves').textContent = d.leavesToday;
+        document.getElementById('dash-avg-hours').textContent = d.avgHours + 'h';
+        document.getElementById('dash-pending-leaves').textContent = d.pendingLeaves;
 
-    const codeEl = document.getElementById('emp-code');
-    const nameEl = document.getElementById('emp-name');
-    const deptEl = document.getElementById('emp-dept');
-    const emailEl = document.getElementById('emp-email');
-    const code = codeEl.value.trim();
-    const name = nameEl.value.trim();
-    const dept = deptEl.value.trim();
-    const email = emailEl.value.trim();
+        // Weekly Chart
+        renderWeeklyChart(d.weeklyData);
+        // Department Chart
+        renderDeptChart(d.deptBreakdown);
+        // Top Late Table
+        renderTopLate(d.topLate);
+        // Absent List
+        renderAbsentList(d.absentList);
+    } catch (err) {
+        toast('Failed to load dashboard', 'error');
+        console.error(err);
+    }
+}
 
-    let valid = true;
-    [codeEl, nameEl, deptEl, emailEl].forEach(el => {
-        el.classList.remove('error');
-        if (!el.value.trim()) { el.classList.add('error'); valid = false; }
+function renderWeeklyChart(data) {
+    const ctx = document.getElementById('weekly-chart');
+    if (dashboardCharts.weekly) dashboardCharts.weekly.destroy();
+    dashboardCharts.weekly = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.label),
+            datasets: [
+                { label: 'On Time', data: data.map(d => d.onTime), backgroundColor: '#27ae60', borderRadius: 4 },
+                { label: 'Late', data: data.map(d => d.late), backgroundColor: '#e74c3c', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#ccc' } } },
+            scales: {
+                x: { stacked: true, ticks: { color: '#aaa' }, grid: { display: false } },
+                y: { stacked: true, ticks: { color: '#aaa' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            }
+        }
     });
-    if (!valid) { toast('All fields are required.', 'warning'); return false; }
-    if (staffDB.some(e => e.code === code)) { codeEl.classList.add('error'); toast('Employee code already exists.', 'error'); return false; }
+}
 
-    isSubmitting = true;
+function renderDeptChart(data) {
+    const ctx = document.getElementById('dept-chart');
+    if (dashboardCharts.dept) dashboardCharts.dept.destroy();
+    if (!data || data.length === 0) return;
+    const colors = ['#C8A951', '#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f39c12', '#1abc9c'];
+    dashboardCharts.dept = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: data.map(d => d._id || 'Unknown'),
+            datasets: [{ data: data.map(d => d.count), backgroundColor: colors.slice(0, data.length), borderWidth: 0 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: '#ccc', padding: 15 } } }
+        }
+    });
+}
+
+function renderTopLate(data) {
+    const tbody = document.getElementById('top-late-tbody');
+    if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="empty-msg">No late arrivals 🎉</td></tr>'; return; }
+    tbody.innerHTML = data.map((d, i) => `
+        <tr><td>${i + 1}</td><td>${d._id.name} (${d._id.code})</td><td><span class="badge badge-late">${d.count} days</span></td></tr>
+    `).join('');
+}
+
+function renderAbsentList(data) {
+    const tbody = document.getElementById('absent-tbody');
+    if (!tbody) return;
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-msg">All employees present! 🎉</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.map(d => `
+        <tr>
+            <td>${d.code}</td>
+            <td><strong>${d.name}</strong></td>
+            <td>${d.dept}</td>
+            <td>${d.onLeave ? '<span class="badge badge-approved">ON LEAVE</span>' : '<span class="badge badge-absent">ABSENT</span>'}</td>
+        </tr>
+    `).join('');
+}
+
+// ============ STAFF MANAGEMENT ============
+async function loadStaffList() {
+    try {
+        const staff = await api('GET', '/api/staff');
+        document.getElementById('staff-count-badge').textContent = staff.length;
+        const container = document.getElementById('staff-list');
+        const bulkToolbar = document.getElementById('bulk-toolbar');
+        bulkToolbar.style.display = staff.length > 0 ? 'flex' : 'none';
+        if (staff.length === 0) { container.innerHTML = '<p class="empty-msg">No staff registered yet.</p>'; return; }
+        container.innerHTML = staff.map((emp, i) => `
+            <div class="staff-card" data-id="${emp._id}">
+                <div class="card-actions">
+                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}')" title="Edit">✏️</button>
+                    <button class="btn-card-action delete" onclick="removeStaff('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')" title="Remove">✕</button>
+                </div>
+                <div class="emp-code">${emp.code}</div>
+                <div class="emp-name">${emp.name}</div>
+                <div class="emp-dept">${emp.dept}</div>
+                <div class="emp-email">📧 ${emp.email}</div>
+                <div class="emp-shift">🕐 ${emp.shift || 'General'}</div>
+                <input type="checkbox" class="card-checkbox" data-id="${emp._id}" onchange="onCardCheckChange(this)">
+            </div>
+        `).join('');
+    } catch (err) {
+        toast('Failed to load staff', 'error');
+    }
+}
+
+async function addStaff(e) {
+    if (e) e.preventDefault();
+    const code = document.getElementById('emp-code').value.trim();
+    const name = document.getElementById('emp-name').value.trim();
+    const dept = document.getElementById('emp-dept').value.trim();
+    const email = document.getElementById('emp-email').value.trim();
+    const shift = document.getElementById('emp-shift-select')?.value || 'General';
+    if (!code || !name || !dept || !email) { toast('All fields required', 'warning'); return false; }
+
     const btn = document.getElementById('btn-add-staff');
     btn.disabled = true; btn.textContent = '⏳ Adding…';
 
-    staffDB.push({ code, name, dept, email });
-    saveStaff();
-    document.getElementById('staff-form').reset();
-    [codeEl, nameEl, deptEl, emailEl].forEach(el => el.classList.remove('error'));
-
-    const card = document.getElementById('staff-form-card');
-    card.classList.remove('success-flash');
-    void card.offsetWidth;
-    card.classList.add('success-flash');
-
-    toast(`${name} added to the system ✓`, 'success');
-    renderStaffList();
-    setTimeout(() => { isSubmitting = false; btn.disabled = false; btn.textContent = '➕ Add to System'; }, 400);
+    try {
+        await api('POST', '/api/staff', { code, name, dept, email, shift });
+        toast(`${name} added ✓`, 'success');
+        document.getElementById('staff-form').reset();
+        loadStaffList();
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = '➕ Add to System';
+    }
     return false;
 }
 
-function removeStaff(index) {
-    const emp = staffDB[index];
-    if (!confirm(`Remove ${emp.name} (${emp.code})?`)) return;
-    staffDB.splice(index, 1);
-    saveStaff(); renderStaffList();
-    toast('Staff removed.', 'info');
+async function removeStaff(id, name) {
+    if (!confirm(`Remove ${name}?`)) return;
+    try {
+        await api('DELETE', `/api/staff/${id}`);
+        toast('Staff removed', 'info');
+        loadStaffList();
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
-function openEditModal(index) {
-    const emp = staffDB[index];
-    document.getElementById('edit-index').value = index;
-    document.getElementById('edit-code').value = emp.code;
-    document.getElementById('edit-name').value = emp.name;
-    document.getElementById('edit-dept').value = emp.dept;
-    document.getElementById('edit-email').value = emp.email;
+function openEditModal(id, code, name, dept, email, shift) {
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-code').value = code;
+    document.getElementById('edit-name').value = name;
+    document.getElementById('edit-dept').value = dept;
+    document.getElementById('edit-email').value = email;
+    document.getElementById('edit-shift').value = shift || 'General';
     document.getElementById('edit-modal').style.display = 'flex';
 }
 function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
 
-function saveEdit() {
-    const index = parseInt(document.getElementById('edit-index').value);
+async function saveEdit() {
+    const id = document.getElementById('edit-id').value;
     const name = document.getElementById('edit-name').value.trim();
     const dept = document.getElementById('edit-dept').value.trim();
     const email = document.getElementById('edit-email').value.trim();
-    if (!name || !dept || !email) { toast('All fields are required.', 'warning'); return; }
-    staffDB[index].name = name;
-    staffDB[index].dept = dept;
-    staffDB[index].email = email;
-    saveStaff(); closeEditModal(); renderStaffList();
-    toast(`${name} updated successfully ✓`, 'success');
+    const shift = document.getElementById('edit-shift').value;
+    if (!name || !dept || !email) { toast('All fields required', 'warning'); return; }
+
+    try {
+        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift });
+        toast(`${name} updated ✓`, 'success');
+        closeEditModal(); loadStaffList();
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
-// Bulk
+// Bulk operations
 function toggleSelectAll(checked) {
     document.querySelectorAll('.card-checkbox').forEach(cb => {
         cb.checked = checked;
@@ -487,69 +541,48 @@ function toggleSelectAll(checked) {
 function onCardCheckChange(cb) {
     cb.closest('.staff-card')?.classList.toggle('selected', cb.checked);
     updateSelectedCount();
-    const allCbs = document.querySelectorAll('.card-checkbox');
-    const sa = document.getElementById('select-all-cb');
-    if (sa) sa.checked = [...allCbs].every(c => c.checked) && allCbs.length > 0;
 }
 function updateSelectedCount() {
     const el = document.getElementById('selected-count');
     if (el) el.textContent = document.querySelectorAll('.card-checkbox:checked').length;
 }
-function deleteSelected() {
+async function deleteSelected() {
     const checked = document.querySelectorAll('.card-checkbox:checked');
-    if (checked.length === 0) { toast('No staff selected.', 'warning'); return; }
+    if (checked.length === 0) { toast('No staff selected', 'warning'); return; }
     if (!confirm(`Delete ${checked.length} employee(s)?`)) return;
-    [...checked].map(cb => parseInt(cb.dataset.index)).sort((a, b) => b - a).forEach(i => staffDB.splice(i, 1));
-    saveStaff(); document.getElementById('select-all-cb').checked = false;
-    renderStaffList(); toast(`${checked.length} employee(s) deleted.`, 'info');
+    const ids = [...checked].map(cb => cb.dataset.id);
+    try {
+        await api('POST', '/api/staff/bulk/delete', { ids });
+        toast(`${ids.length} deleted`, 'info');
+        loadStaffList();
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
-function renderStaffList() {
-    const container = document.getElementById('staff-list');
-    const badge = document.getElementById('staff-count-badge');
-    const bulkToolbar = document.getElementById('bulk-toolbar');
-    badge.textContent = staffDB.length;
-    bulkToolbar.style.display = staffDB.length > 0 ? 'flex' : 'none';
-    if (staffDB.length === 0) { container.innerHTML = '<p class="empty-msg">No staff registered yet.</p>'; return; }
-    container.innerHTML = staffDB.map((emp, i) => `
-        <div class="staff-card" id="card-${i}">
-            <div class="card-actions">
-                <button class="btn-card-action edit" onclick="openEditModal(${i})" title="Edit">✏️</button>
-                <button class="btn-card-action delete" onclick="removeStaff(${i})" title="Remove">✕</button>
-            </div>
-            <div class="emp-code">${emp.code}</div>
-            <div class="emp-name">${emp.name}</div>
-            <div class="emp-dept">${emp.dept}</div>
-            <div class="emp-email">📧 ${emp.email}</div>
-            <input type="checkbox" class="card-checkbox" data-index="${i}" onchange="onCardCheckChange(this)">
-        </div>
-    `).join('');
-}
-
-// ============ EXCEL IMPORT/EXPORT ============
+// Excel Import/Export
 function downloadSampleExcel() {
     const sampleData = [
-        { 'Employee Code': 'EMP-001', 'Full Name': 'Rahul Sharma', 'Department': 'Accounting', 'Email': 'rahul@company.com' },
-        { 'Employee Code': 'EMP-002', 'Full Name': 'Priya Singh', 'Department': 'HR', 'Email': 'priya@company.com' },
-        { 'Employee Code': 'EMP-003', 'Full Name': 'Amit Kumar', 'Department': 'IT', 'Email': 'amit@company.com' }
+        { 'Employee Code': 'EMP-001', 'Full Name': 'Rahul Sharma', 'Department': 'Accounting', 'Email': 'rahul@company.com', 'Shift': 'General' },
+        { 'Employee Code': 'EMP-002', 'Full Name': 'Priya Singh', 'Department': 'HR', 'Email': 'priya@company.com', 'Shift': 'Morning' }
     ];
     const ws = XLSX.utils.json_to_sheet(sampleData);
-    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 18 }, { wch: 28 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 18 }, { wch: 28 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Staff');
     XLSX.writeFile(wb, 'BookMyCA_Sample_Staff.xlsx');
-    toast('📥 Sample Excel downloaded!', 'success');
+    toast('📥 Sample downloaded!', 'success');
 }
 
-function exportStaffExcel() {
-    if (staffDB.length === 0) { toast('No staff data to export.', 'warning'); return; }
-    const data = staffDB.map(emp => ({ 'Employee Code': emp.code, 'Full Name': emp.name, 'Department': emp.dept, 'Email': emp.email }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 18 }, { wch: 28 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Staff');
-    XLSX.writeFile(wb, 'BookMyCA_Staff_Export.xlsx');
-    toast('📤 Staff data exported!', 'success');
+async function exportStaffExcel() {
+    try {
+        const staff = await api('GET', '/api/staff');
+        if (staff.length === 0) { toast('No staff to export', 'warning'); return; }
+        const data = staff.map(emp => ({ 'Employee Code': emp.code, 'Full Name': emp.name, 'Department': emp.dept, 'Email': emp.email, 'Shift': emp.shift }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Staff');
+        XLSX.writeFile(wb, 'BookMyCA_Staff_Export.xlsx');
+        toast('📤 Exported!', 'success');
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
 function handleExcelFile(event) {
@@ -559,34 +592,27 @@ function handleExcelFile(event) {
     event.target.value = '';
 }
 
-function processExcelFile(file) {
+async function processExcelFile(file) {
     const reader = new FileReader();
-    reader.onload = function (e) {
+    reader.onload = async function (e) {
         try {
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, { type: 'array' });
             const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-            if (rows.length === 0) { toast('Excel file is empty.', 'warning'); return; }
+            if (rows.length === 0) { toast('File empty', 'warning'); return; }
 
-            let added = 0, skipped = 0, errors = 0;
-            rows.forEach((row, idx) => {
-                const code = String(row['Employee Code'] || row['Code'] || row['code'] || row['EmpCode'] || '').trim();
-                const name = String(row['Full Name'] || row['Name'] || row['name'] || row['Employee Name'] || '').trim();
-                const dept = String(row['Department'] || row['Dept'] || row['department'] || '').trim();
-                const email = String(row['Email'] || row['email'] || row['Email Address'] || '').trim();
-                if (!code || !name || !dept || !email) { errors++; return; }
-                if (staffDB.some(e => e.code === code)) { skipped++; return; }
-                staffDB.push({ code, name, dept, email }); added++;
-            });
+            const employees = rows.map(row => ({
+                code: String(row['Employee Code'] || row['Code'] || '').trim(),
+                name: String(row['Full Name'] || row['Name'] || '').trim(),
+                dept: String(row['Department'] || row['Dept'] || '').trim(),
+                email: String(row['Email'] || '').trim(),
+                shift: String(row['Shift'] || 'General').trim()
+            }));
 
-            saveStaff(); renderStaffList();
-            let msg = `📊 Import: ${added} added`;
-            if (skipped) msg += `, ${skipped} duplicates skipped`;
-            if (errors) msg += `, ${errors} errors`;
-            toast(msg, added > 0 ? 'success' : 'warning', 5000);
-        } catch (err) {
-            toast('❌ Could not parse file.', 'error');
-        }
+            const result = await api('POST', '/api/staff/bulk', { employees });
+            toast(`📊 Import: ${result.added} added, ${result.skipped} skipped, ${result.errors} errors`, result.added > 0 ? 'success' : 'warning');
+            loadStaffList();
+        } catch (err) { toast('❌ Could not parse file', 'error'); }
     };
     reader.readAsArrayBuffer(file);
 }
@@ -605,239 +631,353 @@ function initDragDrop() {
         if (files.length > 0) {
             const ext = files[0].name.split('.').pop().toLowerCase();
             if (['xlsx', 'xls', 'csv'].includes(ext)) processExcelFile(files[0]);
-            else toast('Please upload an Excel or CSV file.', 'warning');
+            else toast('Upload Excel/CSV only', 'warning');
         }
     });
 }
 
-// ============ LOGS & REPORTS ============
-function updateLogStats() {
-    document.getElementById('total-logs').textContent = attendanceLogs.length;
-    const today = getTodayStr();
-    const todayLogs = attendanceLogs.filter(l => l.date === today);
-    document.getElementById('today-logs').textContent = todayLogs.length;
-    document.getElementById('late-count').textContent = todayLogs.filter(l => l.status === 'LATE').length;
+// ============ REPORTS (with filters) ============
+async function loadReports() {
+    const from = document.getElementById('filter-from')?.value || '';
+    const to = document.getElementById('filter-to')?.value || '';
+    const employee = document.getElementById('filter-employee')?.value || '';
+    const dept = document.getElementById('filter-dept')?.value || '';
+    const status = document.getElementById('filter-status')?.value || 'all';
+    const type = document.getElementById('filter-type')?.value || 'all';
+
+    // Convert date inputs (YYYY-MM-DD) to DD/MM/YYYY
+    let fromStr = '', toStr = '';
+    if (from) { const d = new Date(from); fromStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+    if (to) { const d = new Date(to); toStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+
+    const params = new URLSearchParams();
+    if (fromStr) params.set('from', fromStr);
+    if (toStr) params.set('to', toStr);
+    if (employee) params.set('employee', employee);
+    if (dept) params.set('dept', dept);
+    if (status !== 'all') params.set('status', status);
+    if (type !== 'all') params.set('type', type);
+
+    try {
+        const data = await api('GET', `/api/attendance/logs?${params}`);
+        document.getElementById('total-logs').textContent = data.total;
+
+        const tbody = document.getElementById('logs-tbody');
+        const noMsg = document.getElementById('no-logs');
+        if (data.logs.length === 0) { tbody.innerHTML = ''; noMsg.style.display = 'block'; return; }
+        noMsg.style.display = 'none';
+
+        tbody.innerHTML = data.logs.map(l => {
+            const statusBadge = l.type === 'IN'
+                ? `<span class="badge ${l.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${l.status}</span>` : l.status || '—';
+            const typeBadge = `<span class="badge ${l.type === 'IN' ? 'badge-in' : 'badge-out'}">${l.type}</span>`;
+            const coordsCell = l.coords && l.coords.lat
+                ? `<a href="${l.mapUrl}" target="_blank" class="coords-link">${l.coords.lat.toFixed(4)}, ${l.coords.lng.toFixed(4)}</a>` : '—';
+            return `<tr>
+                <td>${l.date}</td><td>${l.time}</td>
+                <td>${typeBadge}</td><td>${statusBadge}</td>
+                <td>${l.code}</td><td><strong>${l.name}</strong></td>
+                <td>${l.department}</td><td>${coordsCell}</td>
+            </tr>`;
+        }).join('');
+
+        // Populate employee filter dropdown
+        populateFilterDropdowns();
+    } catch (err) {
+        toast('Failed to load reports', 'error');
+    }
 }
 
-function renderLogsTable() {
-    const tbody = document.getElementById('logs-tbody');
-    const noMsg = document.getElementById('no-logs');
-    if (attendanceLogs.length === 0) { tbody.innerHTML = ''; noMsg.style.display = 'block'; return; }
-    noMsg.style.display = 'none';
-    tbody.innerHTML = attendanceLogs.slice().reverse().map(l => {
-        const statusBadge = l.type === 'IN'
-            ? `<span class="badge ${l.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${l.status}</span>`
-            : '—';
-        const typeBadge = `<span class="badge ${l.type === 'IN' ? 'badge-in' : 'badge-out'}">${l.type}</span>`;
-        const coordsCell = l.coords
-            ? `<a href="${l.mapUrl}" target="_blank" class="coords-link">${l.coords.lat.toFixed(4)}, ${l.coords.lng.toFixed(4)}</a>`
-            : '—';
-        const hours = l.type === 'OUT' ? (getWorkingHours(l.code, l.date) || '—') : '—';
-        return `<tr>
-            <td>${l.date}</td><td>${l.time}</td>
-            <td>${typeBadge}</td><td>${statusBadge}</td>
-            <td>${l.code}</td><td><strong>${l.name}</strong></td>
-            <td>${l.department}</td>
-            <td>${coordsCell}</td>
-            <td>${hours}</td>
-            <td>${l.snapshot ? `<img src="${l.snapshot}" class="thumb" alt="snap">` : '—'}</td>
-        </tr>`;
-    }).join('');
-}
-
-// ============ PDF EXPORT (MATCHING SAMPLE REPORT) ============
-function exportPDF() {
-    if (attendanceLogs.length === 0) { toast('No logs to export.', 'warning'); return; }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-
-    // Title page header
-    doc.setFillColor(11, 60, 93);
-    doc.rect(0, 0, pw, 24, 'F');
-    doc.setFillColor(200, 169, 81);
-    doc.rect(0, 24, pw, 2, 'F');
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Smart Attend - Daily Report', pw / 2, 16, { align: 'center' });
-
-    doc.setTextColor(100, 100, 100);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const nowStr = new Date().toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    doc.text('Report Generated: ' + nowStr, 14, 36);
-
-    let y = 46;
-
-    attendanceLogs.forEach((entry, idx) => {
-        // Check if we need a new page
-        if (y > ph - 80) {
-            doc.addPage();
-            y = 20;
+async function populateFilterDropdowns() {
+    try {
+        const staff = await api('GET', '/api/staff');
+        const empSel = document.getElementById('filter-employee');
+        if (empSel && empSel.options.length <= 1) {
+            staff.forEach(emp => {
+                const opt = document.createElement('option');
+                opt.value = emp._id;
+                opt.textContent = `${emp.name} (${emp.code})`;
+                empSel.appendChild(opt);
+            });
         }
+        // Dept dropdown
+        const deptSel = document.getElementById('filter-dept');
+        if (deptSel && deptSel.options.length <= 1) {
+            const depts = [...new Set(staff.map(s => s.dept))];
+            depts.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d;
+                deptSel.appendChild(opt);
+            });
+        }
+    } catch (err) { /* ignore */ }
+}
 
-        // Divider
-        doc.setDrawColor(200, 200, 200);
-        doc.line(14, y, pw - 14, y);
-        y += 8;
+// PDF Export
+async function exportPDF() {
+    toast('Generating PDF…', 'info');
+    try {
+        const data = await api('GET', '/api/attendance/logs?limit=500');
+        if (data.logs.length === 0) { toast('No logs to export', 'warning'); return; }
 
-        // Name & code
-        doc.setTextColor(11, 60, 93);
-        doc.setFontSize(12);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l', 'mm', 'a4'); // landscape
+        const pw = doc.internal.pageSize.getWidth();
+        const ph = doc.internal.pageSize.getHeight();
+
+        // Header
+        doc.setFillColor(11, 60, 93);
+        doc.rect(0, 0, pw, 20, 'F');
+        doc.setFillColor(200, 169, 81);
+        doc.rect(0, 20, pw, 1.5, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text(`Name: ${entry.name} (${entry.code})`, 14, y);
+        doc.text('BookMyCA Smart Attend — Attendance Report', pw / 2, 13, { align: 'center' });
 
-        // Status badge
-        y += 6;
-        if (entry.type === 'IN') {
-            if (entry.status === 'LATE') {
-                doc.setTextColor(231, 76, 60);
-                doc.text('Status: LATE', 14, y);
-            } else {
-                doc.setTextColor(39, 174, 96);
-                doc.text('Status: ON TIME', 14, y);
-            }
-        } else {
-            doc.setTextColor(200, 169, 81);
-            doc.text('Type: CHECK-OUT', 14, y);
-        }
-
-        // Dept & Time
-        y += 6;
-        doc.setTextColor(80, 80, 80);
+        doc.setTextColor(100, 100, 100);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Dept: ${entry.department} | Time: ${entry.time}`, 14, y);
+        doc.text('Generated: ' + new Date().toLocaleString('en-IN'), 14, 30);
 
-        // Working hours (for OUT entries)
-        if (entry.type === 'OUT') {
-            const hrs = getWorkingHours(entry.code, entry.date);
-            if (hrs) {
-                y += 5;
-                doc.setFont('helvetica', 'bold');
-                doc.text(`Working Hours: ${hrs}`, 14, y);
-                doc.setFont('helvetica', 'normal');
-            }
-        }
+        // Table
+        const headers = ['Date', 'Time', 'Type', 'Status', 'Code', 'Name', 'Dept', 'Coordinates'];
+        const colWidths = [25, 22, 15, 20, 20, 40, 30, 50];
+        let y = 38;
 
-        // Location Details
-        y += 8;
+        // Header row
+        doc.setFillColor(11, 60, 93);
+        doc.rect(14, y - 5, pw - 28, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(11, 60, 93);
-        doc.setFontSize(9);
-        doc.text('Location Details:', 14, y);
+        let x = 16;
+        headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+        y += 8;
+
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(80, 80, 80);
+        doc.setTextColor(60, 60, 60);
+        data.logs.forEach((l, idx) => {
+            if (y > ph - 15) { doc.addPage(); y = 20; }
+            if (idx % 2 === 0) { doc.setFillColor(245, 247, 250); doc.rect(14, y - 4, pw - 28, 6, 'F'); }
+            x = 16;
+            const row = [l.date, l.time, l.type, l.status || '—', l.code, l.name, l.department,
+                l.coords ? `${l.coords.lat?.toFixed(4)}, ${l.coords.lng?.toFixed(4)}` : '—'];
+            doc.setFontSize(7);
+            row.forEach((val, i) => { doc.text(String(val).substring(0, 30), x, y); x += colWidths[i]; });
+            y += 6;
+        });
 
-        y += 5;
-        // Area
-        const locLines = doc.splitTextToSize('Area: ' + (entry.location || 'N/A'), 110);
-        doc.text(locLines, 14, y);
-        y += locLines.length * 4;
-
-        // Coords
-        if (entry.coords) {
-            doc.text(`Coords: ${entry.coords.lat.toFixed(4)}, ${entry.coords.lng.toFixed(4)}`, 14, y);
-            y += 4;
-        }
-
-        // IP
-        if (entry.ip) {
-            doc.text(`IP: ${entry.ip}`, 14, y);
-            y += 4;
-        }
-
-        // Map link
-        if (entry.mapUrl) {
-            doc.setTextColor(20, 85, 128);
-            doc.textWithLink('Map: ' + entry.mapUrl, 14, y, { url: entry.mapUrl });
-            doc.setTextColor(80, 80, 80);
-            y += 4;
-        }
-
-        // Snapshot on right side
-        if (entry.snapshot) {
-            try {
-                const snapY = y - 30;
-                doc.addImage(entry.snapshot, 'JPEG', pw - 14 - 40, Math.max(snapY, y - 28), 40, 30);
-            } catch (e) { /* skip if image fails */ }
-        }
-
-        y += 12;
-    });
-
-    // Footer on last page
-    doc.setFontSize(7);
-    doc.setTextColor(160, 160, 160);
-    doc.text('Generated by BookMyCA Smart Attend Suite', pw / 2, ph - 8, { align: 'center' });
-
-    doc.save('BookMyCA_Attendance_Report.pdf');
-    toast('PDF Report downloaded!', 'success');
+        doc.setFontSize(7);
+        doc.setTextColor(160, 160, 160);
+        doc.text('BookMyCA Smart Attend Suite', pw / 2, ph - 5, { align: 'center' });
+        doc.save('BookMyCA_Attendance_Report.pdf');
+        toast('PDF downloaded! ✓', 'success');
+    } catch (err) { toast('PDF export failed', 'error'); }
 }
 
-// ============ GEOFENCE & PROXIMITY REMINDER ============
+// Payroll Export
+async function exportPayroll() {
+    const month = document.getElementById('payroll-month')?.value;
+    if (!month) { toast('Select a month', 'warning'); return; }
+    const [y, m] = month.split('-');
+    try {
+        const res = await api('GET', `/api/export/payroll?month=${m}&year=${y}`, null, true);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `payroll_${m}_${y}.csv`;
+        a.click(); URL.revokeObjectURL(url);
+        toast('Payroll CSV downloaded! ✓', 'success');
+    } catch (err) { toast('Export failed', 'error'); }
+}
+
+// ============ LEAVE MANAGEMENT (Admin) ============
+async function loadLeaveRequests() {
+    const filterStatus = document.getElementById('leave-filter-status')?.value || 'all';
+    try {
+        const leaves = await api('GET', `/api/leave/list?status=${filterStatus}`);
+        const container = document.getElementById('admin-leaves-list');
+        if (leaves.length === 0) { container.innerHTML = '<p class="empty-msg">No leave requests</p>'; return; }
+        container.innerHTML = leaves.map(l => `
+            <div class="leave-card ${l.status}">
+                <div class="leave-info">
+                    <strong>${l.staffName}</strong> (${l.staffCode}) — ${l.date}
+                    <br><small>${l.leaveType.toUpperCase()} ${l.reason ? '| ' + l.reason : ''}</small>
+                </div>
+                <div class="leave-actions">
+                    ${l.status === 'pending' ? `
+                        <button class="btn btn-sm btn-success" onclick="handleLeave('${l._id}', 'approved')">✅ Approve</button>
+                        <button class="btn btn-sm btn-danger" onclick="handleLeave('${l._id}', 'rejected')">❌ Reject</button>
+                    ` : `<span class="badge badge-${l.status}">${l.status.toUpperCase()}</span>${l.approvedBy ? `<small>by ${l.approvedBy}</small>` : ''}`}
+                </div>
+            </div>
+        `).join('');
+    } catch (err) { toast('Failed to load leaves', 'error'); }
+}
+
+async function handleLeave(id, status) {
+    try {
+        await api('PUT', `/api/leave/${id}`, { status });
+        toast(`Leave ${status} ✓`, 'success');
+        loadLeaveRequests();
+        loadDashboard();
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
+}
+
+// ============ SETTINGS ============
+async function loadSettingsUI() {
+    try {
+        const s = await api('GET', '/api/settings');
+        document.getElementById('setting-start-time').value = s.officeStartTime;
+        document.getElementById('setting-grace').value = s.graceMinutes;
+        document.getElementById('setting-office-loc').value = `${s.officeLat}, ${s.officeLng}`;
+        document.getElementById('setting-geofence').value = s.geofenceRadius;
+        // Shifts
+        renderShiftsUI(s.shifts || []);
+    } catch (err) { console.error(err); }
+}
+
+function renderShiftsUI(shifts) {
+    const container = document.getElementById('shifts-list');
+    if (!container) return;
+    container.innerHTML = shifts.map((s, i) => `
+        <div class="shift-card">
+            <input type="text" class="form-input shift-name" value="${s.name}" placeholder="Shift Name">
+            <input type="time" class="form-input shift-start" value="${s.startTime}">
+            <input type="time" class="form-input shift-end" value="${s.endTime}">
+            <input type="number" class="form-input shift-grace" value="${s.graceMinutes}" min="0" max="120" style="width:80px">
+            <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>
+        </div>
+    `).join('');
+}
+
+function addShiftRow() {
+    const container = document.getElementById('shifts-list');
+    const div = document.createElement('div');
+    div.className = 'shift-card';
+    div.innerHTML = `
+        <input type="text" class="form-input shift-name" value="" placeholder="Shift Name">
+        <input type="time" class="form-input shift-start" value="09:00">
+        <input type="time" class="form-input shift-end" value="18:00">
+        <input type="number" class="form-input shift-grace" value="15" min="0" max="120" style="width:80px">
+        <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>
+    `;
+    container.appendChild(div);
+}
+
+async function saveSettings() {
+    const officeStartTime = document.getElementById('setting-start-time').value || '10:00';
+    const graceMinutes = parseInt(document.getElementById('setting-grace').value) || 15;
+    const locParts = (document.getElementById('setting-office-loc').value || '').split(',');
+    const officeLat = parseFloat(locParts[0]?.trim()) || 26.892900;
+    const officeLng = parseFloat(locParts[1]?.trim()) || 75.793900;
+    const geofenceRadius = parseInt(document.getElementById('setting-geofence').value) || 500;
+
+    // Collect shifts
+    const shiftCards = document.querySelectorAll('.shift-card');
+    const shifts = [...shiftCards].map(card => ({
+        name: card.querySelector('.shift-name').value.trim() || 'General',
+        startTime: card.querySelector('.shift-start').value || '10:00',
+        endTime: card.querySelector('.shift-end').value || '19:00',
+        graceMinutes: parseInt(card.querySelector('.shift-grace').value) || 15
+    }));
+
+    try {
+        await api('PUT', '/api/settings', { officeStartTime, graceMinutes, officeLat, officeLng, geofenceRadius, shifts });
+        toast('Settings saved ✓', 'success');
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
+}
+
+// ============ ADMIN MANAGEMENT ============
+async function loadAdminList() {
+    try {
+        const admins = await api('GET', '/api/admin/list');
+        const container = document.getElementById('admin-list');
+        container.innerHTML = admins.map(a => `
+            <div class="staff-card">
+                <div class="emp-name">${a.name}</div>
+                <div class="emp-email">📧 ${a.email}</div>
+                <div class="emp-dept"><span class="badge badge-${a.role === 'superadmin' ? 'ontime' : 'in'}">${a.role}</span></div>
+                ${a.role !== 'superadmin' ? `<button class="btn btn-danger btn-sm" onclick="removeAdmin('${a._id}', '${a.name}')">Remove</button>` : ''}
+            </div>
+        `).join('');
+    } catch (err) { toast('Failed to load admins', 'error'); }
+}
+
+async function addAdmin(e) {
+    if (e) e.preventDefault();
+    const name = document.getElementById('new-admin-name').value.trim();
+    const email = document.getElementById('new-admin-email').value.trim();
+    const password = document.getElementById('new-admin-pass').value;
+    const role = document.getElementById('new-admin-role')?.value || 'admin';
+    if (!name || !email || !password) { toast('All fields required', 'warning'); return false; }
+
+    try {
+        await api('POST', '/api/admin/add', { name, email, password, role });
+        toast(`${name} added as admin ✓`, 'success');
+        document.getElementById('admin-form').reset();
+        loadAdminList();
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
+    return false;
+}
+
+async function removeAdmin(id, name) {
+    if (!confirm(`Remove admin ${name}?`)) return;
+    try {
+        await api('DELETE', `/api/admin/${id}`);
+        toast('Admin removed', 'info');
+        loadAdminList();
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
+}
+
+// ============ GEOFENCE ============
 function haversineDistance(lat1, lng1, lat2, lng2) {
-    const R = 6371000; // meters
+    const R = 6371000;
     const rad = Math.PI / 180;
     const dLat = (lat2 - lat1) * rad;
     const dLng = (lng2 - lng1) * rad;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
-        Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function startGeofenceWatch() {
     if (!navigator.geolocation) return;
-
-    // Request notification permission
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
-
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     geoWatchId = navigator.geolocation.watchPosition(
         (pos) => {
-            const dist = haversineDistance(
-                pos.coords.latitude, pos.coords.longitude,
-                settings.officeLat, settings.officeLng
-            );
-
-            if (dist <= settings.geofenceRadius) {
-                // Check if already notified today
+            // Use default coords if no settings loaded
+            const officeLat = 26.892900, officeLng = 75.793900, radius = 500;
+            const dist = haversineDistance(pos.coords.latitude, pos.coords.longitude, officeLat, officeLng);
+            if (dist <= radius) {
                 const today = getTodayStr();
-                const notifiedKey = 'geofence_notified_' + today;
-                if (!localStorage.getItem(notifiedKey)) {
-                    showProximityNotification();
-                    localStorage.setItem(notifiedKey, '1');
+                const key = 'geofence_notified_' + today;
+                if (!localStorage.getItem(key)) {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('📍 BookMyCA Smart Attend', { body: 'You are near the office! Mark your attendance now.', icon: 'icon-192.png' });
+                    } else { toast('📍 Near office — mark attendance!', 'info', 6000); }
+                    localStorage.setItem(key, '1');
                 }
             }
         },
-        () => { /* silence errors */ },
+        () => {},
         { enableHighAccuracy: true, maximumAge: 60000, timeout: 15000 }
     );
 }
 
-function showProximityNotification() {
-    if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('📍 BookMyCA Smart Attend', {
-            body: 'You are near the office! Mark your attendance now.',
-            icon: 'icon-192.png',
-            tag: 'attendance-reminder',
-            vibrate: [200, 100, 200]
-        });
-    } else {
-        toast('📍 You are near the office — mark your attendance!', 'info', 6000);
-    }
-}
-
 // ============ INIT ============
 document.addEventListener('DOMContentLoaded', () => {
-    showScreen('screen-main');
+    // Check if user is already logged in
+    if (authToken && currentUser) {
+        if (currentUser.type === 'admin') {
+            showScreen('screen-admin-portal');
+        } else {
+            showScreen('screen-emp-dashboard');
+        }
+    } else {
+        showScreen('screen-main');
+    }
     initDragDrop();
     startGeofenceWatch();
 });
