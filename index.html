@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMyCA Smart Attend | Professional Attendance Suite</title>
+    <meta name="description"
+        content="Professional attendance management with OTP verification, camera capture, geolocation tracking, and PDF reporting.">
+    <meta name="theme-color" content="#0B3C5D">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- ============ TOAST ============ -->
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <!-- ============ EDIT MODAL ============ -->
+    <div id="edit-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-card glass">
+            <h3 class="modal-title">✏️ Edit Employee</h3>
+            <input type="hidden" id="edit-index">
+            <div class="form-group">
+                <label class="form-label">Employee Code</label>
+                <input type="text" id="edit-code" class="form-input" readonly style="opacity:0.6; cursor:not-allowed;">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" id="edit-name" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Department</label>
+                <input type="text" id="edit-dept" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" id="edit-email" class="form-input">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary btn-sm" onclick="saveEdit()">💾 Save Changes</button>
+                <button class="btn btn-ghost-dark btn-sm" onclick="closeEditModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ SCREEN: MAIN GATE ============ -->
+    <section id="screen-main" class="screen active">
+        <div class="gate-bg">
+            <div class="gate-card glass">
+                <div class="logo-ring">
+                    <span class="logo-icon">📋</span>
+                </div>
+                <h1>BookMyCA<br><span class="gold">Smart Attend</span></h1>
+                <p class="subtitle">Professional Attendance Suite</p>
+                <button id="btn-checkin" class="btn btn-primary btn-lg" onclick="showScreen('screen-checkin')">
+                    <span class="btn-icon">🕐</span> Staff Check-In
+                </button>
+                <button id="btn-checkout" class="btn btn-accent btn-lg" onclick="showScreen('screen-checkout')">
+                    <span class="btn-icon">🚪</span> Staff Check-Out
+                </button>
+                <button id="btn-admin" class="btn btn-outline btn-lg" onclick="showScreen('screen-admin-login')">
+                    <span class="btn-icon">🔐</span> Admin Portal
+                </button>
+                <p class="footer-tag">Powered by BookMyCA &bull; v3.0</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ SCREEN: STAFF CHECK-IN ============ -->
+    <section id="screen-checkin" class="screen">
+        <div class="layout-split">
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <span class="sidebar-icon">🛡️</span>
+                    <h2>Employee<br>Verification</h2>
+                </div>
+                <ul class="sidebar-steps">
+                    <li id="step-1" class="step active"><span class="step-num">1</span> Select Employee</li>
+                    <li id="step-2" class="step"><span class="step-num">2</span> Verify OTP</li>
+                    <li id="step-3" class="step"><span class="step-num">3</span> Capture & Locate</li>
+                </ul>
+                <button class="btn btn-ghost sidebar-back" onclick="showScreen('screen-main')">← Back to Home</button>
+            </aside>
+            <main class="content-area">
+                <h2 class="page-title">Check-In — Verify Identity</h2>
+                <!-- Step 1: Select Employee -->
+                <div id="checkin-step-1" class="checkin-step active">
+                    <div class="form-card glass">
+                        <label class="form-label">Select Employee</label>
+                        <select id="staff-select" class="form-select"></select>
+                        <button id="btn-send-otp" class="btn btn-primary" onclick="sendOTP()">📨 Send OTP to
+                            Email</button>
+                    </div>
+                </div>
+                <!-- Step 2: Enter OTP -->
+                <div id="checkin-step-2" class="checkin-step">
+                    <div class="form-card glass">
+                        <label class="form-label">Enter Verification Code</label>
+                        <div class="otp-row">
+                            <input type="text" id="otp-input" class="form-input otp-field" maxlength="4"
+                                placeholder="● ● ● ●" autocomplete="off">
+                        </div>
+                        <button class="btn btn-accent" onclick="verifyOTP()">✅ Verify OTP</button>
+                        <button class="btn btn-ghost" onclick="goCheckinStep(1)">← Back</button>
+                    </div>
+                </div>
+                <!-- Step 3: Camera & Location -->
+                <div id="checkin-step-3" class="checkin-step">
+                    <div class="form-card glass camera-card">
+                        <div class="camera-container">
+                            <video id="camera-feed" autoplay playsinline></video>
+                            <canvas id="snapshot-canvas" style="display:none;"></canvas>
+                            <img id="snapshot-preview" class="snapshot-img" style="display:none;"
+                                alt="Snapshot preview">
+                        </div>
+                        <div id="location-badge" class="location-badge">
+                            <span class="pulse-dot"></span> Fetching location…
+                        </div>
+                        <button id="btn-capture" class="btn btn-success btn-lg" onclick="captureAndMark('IN')">
+                            📸 Capture & Mark Check-In
+                        </button>
+                        <button class="btn btn-ghost" onclick="goCheckinStep(2)">← Back</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <!-- ============ SCREEN: STAFF CHECK-OUT ============ -->
+    <section id="screen-checkout" class="screen">
+        <div class="layout-split">
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <span class="sidebar-icon">🚪</span>
+                    <h2>Staff<br>Check-Out</h2>
+                </div>
+                <ul class="sidebar-steps">
+                    <li id="out-step-1" class="step active"><span class="step-num">1</span> Select Employee</li>
+                    <li id="out-step-2" class="step"><span class="step-num">2</span> Capture & Mark Out</li>
+                </ul>
+                <button class="btn btn-ghost sidebar-back" onclick="showScreen('screen-main')">← Back to Home</button>
+            </aside>
+            <main class="content-area">
+                <h2 class="page-title">Check-Out — Mark Exit</h2>
+                <!-- Out Step 1: Select -->
+                <div id="checkout-step-1" class="checkin-step active">
+                    <div class="form-card glass">
+                        <label class="form-label">Select Employee</label>
+                        <select id="checkout-select" class="form-select"></select>
+                        <div id="checkin-info-badge" class="info-badge" style="display:none;"></div>
+                        <button class="btn btn-accent" onclick="proceedCheckout()">➡️ Proceed to Check-Out</button>
+                    </div>
+                </div>
+                <!-- Out Step 2: Camera & Mark -->
+                <div id="checkout-step-2" class="checkin-step">
+                    <div class="form-card glass camera-card">
+                        <div class="camera-container">
+                            <video id="camera-feed-out" autoplay playsinline></video>
+                            <canvas id="snapshot-canvas-out" style="display:none;"></canvas>
+                            <img id="snapshot-preview-out" class="snapshot-img" style="display:none;"
+                                alt="Snapshot preview">
+                        </div>
+                        <div id="location-badge-out" class="location-badge">
+                            <span class="pulse-dot"></span> Fetching location…
+                        </div>
+                        <button class="btn btn-danger btn-lg" onclick="captureAndMark('OUT')">
+                            📸 Capture & Mark Check-Out
+                        </button>
+                        <button class="btn btn-ghost" onclick="goCheckoutStep(1)">← Back</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <!-- ============ SCREEN: ADMIN LOGIN ============ -->
+    <section id="screen-admin-login" class="screen">
+        <div class="gate-bg">
+            <div class="gate-card glass narrow">
+                <div class="logo-ring small">
+                    <span class="logo-icon">🔐</span>
+                </div>
+                <h1>Admin Login</h1>
+                <p class="subtitle">Enter your credentials to continue</p>
+                <input type="email" id="admin-email" class="form-input" placeholder="Admin Email">
+                <input type="password" id="admin-pass" class="form-input" placeholder="Password">
+                <button id="btn-login" class="btn btn-primary btn-lg" onclick="adminLogin()">Sign In</button>
+                <button class="btn btn-ghost" onclick="showScreen('screen-main')">← Cancel</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ SCREEN: ADMIN PORTAL ============ -->
+    <section id="screen-admin-portal" class="screen">
+        <div class="layout-split">
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <span class="sidebar-icon">⚙️</span>
+                    <h2>Admin<br><span class="gold">Portal</span></h2>
+                </div>
+                <p class="admin-greeting">Welcome, <strong>Piyush Mittal</strong></p>
+                <nav class="sidebar-nav">
+                    <button class="btn btn-nav active" id="tab-btn-staff" onclick="switchTab('staff')">👥 Manage
+                        Staff</button>
+                    <button class="btn btn-nav" id="tab-btn-reports" onclick="switchTab('reports')">📊 Audit
+                        Reports</button>
+                    <button class="btn btn-nav" id="tab-btn-settings" onclick="switchTab('settings')">⏰ Office
+                        Settings</button>
+                </nav>
+                <button class="btn btn-ghost sidebar-back" onclick="showScreen('screen-main')">← Exit Portal</button>
+            </aside>
+
+            <main class="content-area">
+                <!-- TAB: Manage Staff -->
+                <div id="tab-staff" class="tab-panel active">
+                    <h2 class="page-title">Register Employee</h2>
+                    <div class="form-card glass" id="staff-form-card">
+                        <form id="staff-form" onsubmit="return addStaff(event)">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Employee Code</label>
+                                    <input type="text" id="emp-code" class="form-input" placeholder="e.g. EMP-001"
+                                        required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Full Name</label>
+                                    <input type="text" id="emp-name" class="form-input" placeholder="e.g. Rahul Sharma"
+                                        required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Department</label>
+                                    <input type="text" id="emp-dept" class="form-input" placeholder="e.g. Accounting"
+                                        required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Email Address</label>
+                                    <input type="email" id="emp-email" class="form-input"
+                                        placeholder="e.g. rahul@company.com" required>
+                                </div>
+                            </div>
+                            <button id="btn-add-staff" type="submit" class="btn btn-primary">➕ Add to System</button>
+                        </form>
+                    </div>
+                    <!-- Excel Bulk Import/Export -->
+                    <div class="bulk-section glass">
+                        <h3 class="bulk-title">📊 Bulk Import / Export via Excel</h3>
+                        <div class="bulk-actions-row">
+                            <button class="btn btn-accent btn-sm" onclick="downloadSampleExcel()">📥 Download Sample
+                                Excel</button>
+                            <button class="btn btn-outline-dark btn-sm" onclick="exportStaffExcel()">📤 Export Current
+                                Staff</button>
+                        </div>
+                        <div id="excel-drop-zone" class="drop-zone"
+                            onclick="document.getElementById('excel-file-input').click()">
+                            <div class="drop-zone-content">
+                                <span class="drop-icon">📁</span>
+                                <p class="drop-text">Drag & Drop Excel file here<br><span class="drop-sub">or click to
+                                        browse (.xlsx, .xls, .csv)</span></p>
+                            </div>
+                            <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" style="display:none;"
+                                onchange="handleExcelFile(event)">
+                        </div>
+                    </div>
+                    <!-- Staff Directory -->
+                    <div class="staff-toolbar">
+                        <h3 class="section-heading">Current Staff Directory <span id="staff-count-badge"
+                                class="count-badge">0</span></h3>
+                        <div class="toolbar-actions" id="bulk-toolbar" style="display:none;">
+                            <label class="checkbox-label"><input type="checkbox" id="select-all-cb"
+                                    onchange="toggleSelectAll(this.checked)"><span>Select All</span></label>
+                            <button class="btn btn-danger btn-sm" onclick="deleteSelected()">🗑️ Delete Selected (<span
+                                    id="selected-count">0</span>)</button>
+                        </div>
+                    </div>
+                    <div id="staff-list" class="staff-grid"></div>
+                </div>
+
+                <!-- TAB: Audit Reports -->
+                <div id="tab-reports" class="tab-panel">
+                    <h2 class="page-title">Attendance Audit</h2>
+                    <div class="report-toolbar glass">
+                        <div class="stat-card">
+                            <span class="stat-num" id="total-logs">0</span>
+                            <span class="stat-label">Total Logs</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-num" id="today-logs">0</span>
+                            <span class="stat-label">Today</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-num" id="late-count">0</span>
+                            <span class="stat-label late-label">Late Today</span>
+                        </div>
+                        <button id="btn-export-pdf" class="btn btn-danger btn-lg" onclick="exportPDF()">📄 Export PDF
+                            Report</button>
+                    </div>
+                    <div id="logs-table-container" class="table-wrapper">
+                        <table class="att-table" id="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Code</th>
+                                    <th>Name</th>
+                                    <th>Dept</th>
+                                    <th>Coordinates</th>
+                                    <th>Hours</th>
+                                    <th>Photo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-tbody"></tbody>
+                        </table>
+                        <p id="no-logs" class="empty-msg">No attendance records yet.</p>
+                    </div>
+                </div>
+
+                <!-- TAB: Office Settings -->
+                <div id="tab-settings" class="tab-panel">
+                    <h2 class="page-title">⏰ Office Settings</h2>
+                    <div class="form-card glass settings-card">
+                        <div class="form-group">
+                            <label class="form-label">Office Start Time</label>
+                            <input type="time" id="setting-start-time" class="form-input" value="10:00">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Late Grace Period (minutes)</label>
+                            <input type="number" id="setting-grace" class="form-input" value="15" min="0" max="120">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Office Location (lat, lng)</label>
+                            <input type="text" id="setting-office-loc" class="form-input" value="26.892900, 75.793900"
+                                placeholder="e.g. 26.892900, 75.793900">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Geofence Radius (meters)</label>
+                            <input type="number" id="setting-geofence" class="form-input" value="500" min="50"
+                                max="5000">
+                        </div>
+                        <button class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+                        <p class="setting-note">These settings control late detection, geofence alerts, and proximity
+                            reminders.</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <script src="app.js"></script>
+    <script>
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(reg => {
+                console.log('✅ Service Worker registered:', reg.scope);
+            }).catch(err => {
+                console.warn('SW registration failed:', err);
+            });
+        }
+    </script>
+</body>
+
+</html>

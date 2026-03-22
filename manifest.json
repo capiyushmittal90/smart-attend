@@ -1,0 +1,24 @@
+{
+    "name": "BookMyCA Smart Attend",
+    "short_name": "Smart Attend",
+    "description": "Professional Attendance Suite by BookMyCA — OTP verification, camera capture, geolocation tracking, late detection, and PDF reports.",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#F4F7F9",
+    "theme_color": "#0B3C5D",
+    "icons": [
+        {
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}
