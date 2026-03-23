@@ -306,8 +306,9 @@ app.post('/api/attendance/checkin', anyAuth, async (req, res) => {
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const todayStr = now.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-IN', { ...IST, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
     // Check if already checked in today
     const existing = await AttendanceLog.findOne({ staffId: staff._id, date: todayStr, type: 'IN' });
@@ -322,10 +323,13 @@ app.post('/api/attendance/checkin', anyAuth, async (req, res) => {
         const startTime = empShift ? empShift.startTime : settings.officeStartTime;
         const grace = empShift ? empShift.graceMinutes : settings.graceMinutes;
 
+        // Get current IST time for late detection
         const [h, m] = startTime.split(':').map(Number);
-        const cutoff = new Date();
+        // Build cutoff as milliseconds in IST
+        const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const cutoff = new Date(nowIST);
         cutoff.setHours(h, m + grace, 0, 0);
-        if (now > cutoff) status = 'LATE';
+        if (nowIST > cutoff) status = 'LATE';
     }
 
     const log = await AttendanceLog.create({
@@ -358,8 +362,9 @@ app.post('/api/attendance/checkout', anyAuth, async (req, res) => {
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const todayStr = now.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-IN', { ...IST, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
     // Check if checked in today
     const checkin = await AttendanceLog.findOne({ staffId: staff._id, date: todayStr, type: 'IN' });
@@ -433,7 +438,8 @@ app.get('/api/attendance/my-logs', anyAuth, async (req, res) => {
 // Dashboard Stats
 app.get('/api/attendance/dashboard', adminAuth, async (req, res) => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const todayStr = now.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const totalStaff = await Staff.countDocuments({ active: true });
     const todayLogs = await AttendanceLog.find({ date: todayStr });
@@ -452,11 +458,12 @@ app.get('/api/attendance/dashboard', adminAuth, async (req, res) => {
     for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const dStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const IST = { timeZone: 'Asia/Kolkata' };
+        const dStr = d.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
         const dayLogs = await AttendanceLog.find({ date: dStr, type: 'IN' });
         weeklyData.push({
             date: dStr,
-            label: d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' }),
+            label: d.toLocaleDateString('en-IN', { ...IST, weekday: 'short', day: '2-digit', month: 'short' }),
             present: dayLogs.length,
             late: dayLogs.filter(l => l.status === 'LATE').length,
             onTime: dayLogs.filter(l => l.status === 'ON TIME').length
@@ -471,7 +478,8 @@ app.get('/api/attendance/dashboard', adminAuth, async (req, res) => {
 
     // Top 5 late employees this month
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthStartStr = monthStart.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const IST2 = { timeZone: 'Asia/Kolkata' };
+    const monthStartStr = monthStart.toLocaleDateString('en-IN', { ...IST2, day: '2-digit', month: '2-digit', year: 'numeric' });
     const topLate = await AttendanceLog.aggregate([
         { $match: { status: 'LATE', type: 'IN' } },
         { $group: { _id: { code: '$code', name: '$name' }, count: { $sum: 1 } } },
