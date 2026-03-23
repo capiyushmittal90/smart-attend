@@ -96,7 +96,7 @@
                 <div id="emp-login-step1">
                     <input type="email" id="emp-login-email" class="form-input" placeholder="Your Email Address">
                     <br>
-                    <input type="password" id="emp-login-password" class="form-input" placeholder="Your Password" style="margin-top:10px;">
+                    <div class="password-wrap"><input type="password" id="emp-login-password" class="form-input" placeholder="Your Password" style="margin-top:10px;"><button type="button" class="eye-btn" onclick="togglePwd('emp-login-password', this)">👁️</button></div>
                     <button id="btn-emp-login" class="btn btn-primary btn-lg" onclick="empLogin(event)" style="margin-top:15px;">👤 Log In</button>
                 </div>
 
@@ -241,7 +241,7 @@
                 <p class="subtitle">Enter your credentials to continue</p>
                 <form onsubmit="adminLogin(); return false;">
                     <input type="email" id="admin-email" class="form-input" placeholder="Admin Email">
-                    <input type="password" id="admin-pass" class="form-input" placeholder="Password">
+                    <div class="password-wrap"><input type="password" id="admin-pass" class="form-input" placeholder="Password"><button type="button" class="eye-btn" onclick="togglePwd('admin-pass', this)">👁️</button></div>
                     <button type="submit" class="btn btn-primary btn-lg">Sign In</button>
                 </form>
                 <button class="btn btn-ghost" onclick="showScreen('screen-main')">← Cancel</button>
@@ -390,8 +390,8 @@
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Password</label>
-                                    <input type="password" id="emp-password" class="form-input"
-                                        placeholder="e.g. 1234" required>
+                                    <div class="password-wrap"><input type="password" id="emp-password" class="form-input"
+                                        placeholder="e.g. 1234" required><button type="button" class="eye-btn" onclick="togglePwd('emp-password', this)">👁️</button></div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Monthly Salary (₹)</label>
@@ -608,7 +608,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Password</label>
-                                    <input type="password" id="new-admin-pass" class="form-input" required>
+                                    <div class="password-wrap"><input type="password" id="new-admin-pass" class="form-input" required><button type="button" class="eye-btn" onclick="togglePwd('new-admin-pass', this)">👁️</button></div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Role</label>

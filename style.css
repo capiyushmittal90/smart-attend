@@ -535,6 +535,32 @@ body {
     flex-direction: column;
 }
 
+/* ===== PASSWORD EYE TOGGLE ===== */
+.password-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.password-wrap .form-input {
+    flex: 1;
+    padding-right: 44px;
+}
+.eye-btn {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 17px;
+    padding: 2px 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    user-select: none;
+    line-height: 1;
+}
+.eye-btn:hover { opacity: 1; }
+.eye-btn.open { opacity: 1; }
+
 .gate-card .form-input {
     border-color: rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.08);

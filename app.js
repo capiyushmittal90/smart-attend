@@ -16,6 +16,15 @@ let dashboardCharts = {};
 const API = '';  // Same-origin
 
 // ============ HELPERS ============
+function togglePwd(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    btn.textContent = isHidden ? '🙈' : '👁️';
+    btn.classList.toggle('open', isHidden);
+}
+
 function api(method, path, body, raw) {
     const headers = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
