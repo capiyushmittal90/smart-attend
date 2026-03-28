@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | Invoice Builder</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; }
+    *, *::before, *::after { box-sizing:border-box; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .navbar { background:var(--navy)!important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+    .btn-navy { background:var(--navy);color:#fff;border:none;transition:all .2s; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff;transform:translateY(-1px); }
+    .form-control,.form-select { border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:.875rem;background:#fff;box-shadow:none!important; }
+    .form-control:focus,.form-select:focus { border-color:#94A3B8; }
+    .builder-card { background:#fff;border-radius:14px;border:1px solid var(--border);padding:24px;margin-bottom:20px; }
+    .section-title { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin-bottom:12px; }
+
+    /* Line items */
+    .line-row { display:flex;gap:10px;align-items:center;margin-bottom:8px; }
+    .line-row input { flex:1;min-width:0; }
+    .line-row .desc { flex:3; }
+    .line-row .sac { flex:1.2; }
+    .line-row .qty,.line-row .rate,.line-row .amt { flex:1; }
+    .line-row .amt { background:#F8FAFC;font-weight:600;pointer-events:none; }
+    .del-line { background:#FEE2E2;color:#DC2626;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:.8rem; }
+
+    /* Tax Summary */
+    .tax-row { display:flex;justify-content:space-between;padding:6px 0;font-size:.9rem; }
+    .tax-row.total { font-weight:700;font-size:1.1rem;border-top:2px solid var(--navy);padding-top:10px;margin-top:8px; }
+
+    /* GST Badge */
+    .gst-badge { display:inline-flex;padding:5px 12px;border-radius:999px;font-size:.78rem;font-weight:700; }
+    .gst-intra { background:#DCFCE7;color:#16A34A; }
+    .gst-inter { background:#EFF6FF;color:#2563EB; }
+    .gst-none  { background:#F1F5F9;color:#64748B; }
+
+    /* Invoice Preview */
+    .preview-frame { background:#fff;border:1px solid var(--border);border-radius:8px;padding:20px;font-size:13px;line-height:1.5; }
+    .preview-frame table { width:100%;border-collapse:collapse; }
+    .preview-frame th,.preview-frame td { border:1px solid #333;padding:6px 8px; }
+    .preview-frame th { background:#f0f0f0;font-size:12px; }
+
+    @media(max-width:768px) { .line-row { flex-wrap:wrap; } .line-row input { flex:none;width:48%; } }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+      <span class="fw-bold fs-5">Bookmyca <span class="text-white-50 fw-light">Invoice Builder</span></span>
+    </a>
+    <div class="d-flex gap-2">
+      <a href="task-portal.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-briefcase me-1"></i>Tasks</a>
+      <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-shield-halved me-1"></i>Hub</a>
+      <a href="client-master.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-address-book me-1"></i>Clients</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+  <div class="row">
+
+    <!-- LEFT: Invoice Form -->
+    <div class="col-lg-7">
+      <div class="builder-card">
+        <p class="section-title"><i class="fa-solid fa-sliders me-1"></i>Invoice Type & Client</p>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small text-muted">Invoice Type</label>
+            <select class="form-select" id="invType" onchange="updateGST()">
+              <option value="GST">GST Invoice</option>
+              <option value="NON_GST">Non-GST Invoice</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small text-muted">Client *</label>
+            <select class="form-select" id="invClient" onchange="onClientChange()">
+              <option value="">— Select Client —</option>
+            </select>
+            <input type="text" class="form-control mt-2" id="invCustomClient" placeholder="Enter custom name" style="display:none;" oninput="onCustomClientInput()">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small text-muted">GST Routing</label>
+            <div id="gstBadge" class="gst-badge gst-intra mt-1">CGST 9% + SGST 9% (Intra-State)</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small text-muted">Invoice Date</label>
+            <input type="date" class="form-control" id="invDate">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small text-muted">Payment Terms</label>
+            <select class="form-select" id="invTerms">
+              <option>Net 15</option><option selected>Net 30</option><option>Net 45</option><option>Net 60</option><option>Immediate</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small text-muted">Notes</label>
+            <input type="text" class="form-control" id="invNotes" placeholder="Optional remarks…">
+          </div>
+        </div>
+      </div>
+
+      <!-- Line Items -->
+      <div class="builder-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p class="section-title mb-0"><i class="fa-solid fa-list me-1"></i>Line Items</p>
+          <button class="btn btn-sm btn-navy" onclick="addLine()"><i class="fa-solid fa-plus me-1"></i>Add Row</button>
+        </div>
+        <div class="line-row" style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#64748B;">
+          <div class="desc">Description</div>
+          <div class="sac">HSN/SAC</div>
+          <div class="qty">Qty</div>
+          <div class="rate">Rate (₹)</div>
+          <div class="amt">Amount</div>
+          <div style="width:36px"></div>
+        </div>
+        <div id="lineItems"></div>
+      </div>
+
+      <!-- Tax Summary -->
+      <div class="builder-card">
+        <p class="section-title"><i class="fa-solid fa-calculator me-1"></i>Tax Summary</p>
+        <div class="tax-row"><span>Taxable Amount</span><strong id="txTaxable">₹0</strong></div>
+        <div class="tax-row" id="txCgstRow"><span>CGST @ 9%</span><strong id="txCgst">₹0</strong></div>
+        <div class="tax-row" id="txSgstRow"><span>SGST @ 9%</span><strong id="txSgst">₹0</strong></div>
+        <div class="tax-row" id="txIgstRow" style="display:none;"><span>IGST @ 18%</span><strong id="txIgst">₹0</strong></div>
+        <div class="tax-row total"><span>Total Amount</span><strong id="txTotal" style="color:var(--navy)">₹0</strong></div>
+        <div class="text-muted small mt-2" id="txWords">—</div>
+      </div>
+
+      <!-- Actions -->
+      <div class="d-flex gap-3 mb-4">
+        <button class="btn btn-navy px-4 fw-semibold" onclick="saveInvoice('Draft')">
+          <i class="fa-solid fa-floppy-disk me-2"></i>Save as Draft
+        </button>
+        <button class="btn px-4 fw-semibold" style="background:#16A34A;color:#fff;" onclick="saveInvoice('Sent')">
+          <i class="fa-solid fa-paper-plane me-2"></i>Save & Send
+        </button>
+        <button class="btn btn-light border px-4 fw-semibold" onclick="previewPDF()">
+          <i class="fa-solid fa-eye me-2"></i>Preview PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Live Preview -->
+    <div class="col-lg-5">
+      <div class="builder-card" style="position:sticky;top:20px;">
+        <p class="section-title"><i class="fa-solid fa-file-pdf me-1 text-danger"></i>Live Invoice Preview</p>
+        <div class="preview-frame" id="previewArea">
+          <p class="text-muted text-center py-5">Select a client and add line items to see preview…</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+const API = '';
+const INR = n => '₹' + Number(n||0).toLocaleString('en-IN');
+let token = '', clientList = [], selectedClient = null, taskData = null;
+
+window.addEventListener('DOMContentLoaded', async () => {
+  token = localStorage.getItem('sa_token');
+  if (!token) { window.location.href='index.html'; return; }
+
+  // Set today's date
+  document.getElementById('invDate').valueAsDate = new Date();
+
+  await loadClients();
+  addLine(); // start with one row
+
+  // Check if linked from a task
+  const params = new URLSearchParams(window.location.search);
+  const taskId = params.get('taskId');
+  if (taskId) await loadTaskData(taskId);
+});
+
+async function loadClients() {
+  try {
+    const r = await fetch(`${API}/api/clients`,{headers:{Authorization:'Bearer '+token}});
+    const data = await r.json();
+    clientList = data.clients || [];
+    const sel = document.getElementById('invClient');
+    sel.innerHTML = '<option value="">— Select Client —</option><option value="CUSTOM" class="fw-bold text-primary">➕ Custom Walk-in Client</option>';
+    clientList.forEach(c => {
+      sel.innerHTML += `<option value="${c._id}">${c.clientName}${c.gstin?' ('+c.gstin+')':''}</option>`;
+    });
+  } catch(e) { console.error(e); }
+}
+
+async function loadTaskData(taskId) {
+  try {
+    const r = await fetch(`${API}/api/tasks/my`,{headers:{Authorization:'Bearer '+token}});
+    const data = await r.json();
+    const task = (data.tasks||[]).find(t => t._id === taskId);
+    if (task) {
+      taskData = task;
+      // Pre-select client
+      if (task.clientId) document.getElementById('invClient').value = task.clientId;
+      onClientChange();
+      // Pre-fill line item with service
+      const lines = document.getElementById('lineItems');
+      if (lines.children.length > 0) {
+        const row = lines.children[0];
+        row.querySelector('.desc').value = task.serviceType + ' Services — ' + task.clientName;
+        row.querySelector('.rate').value = task.finalFees || task.estimatedFees || 0;
+        row.querySelector('.qty').value = 1;
+        recalc();
+      }
+    }
+  } catch(e) { console.error(e); }
+}
+
+function onClientChange() {
+  const id = document.getElementById('invClient').value;
+  const customInput = document.getElementById('invCustomClient');
+  if (id === 'CUSTOM') {
+    customInput.style.display = 'block';
+    selectedClient = { clientName: customInput.value || 'Walk-in Client', stateCode: '08', stateName: 'Rajasthan' };
+  } else {
+    customInput.style.display = 'none';
+    selectedClient = clientList.find(c => c._id === id) || null;
+  }
+  updateGST();
+  renderPreview();
+}
+
+function onCustomClientInput() {
+  if (selectedClient && document.getElementById('invClient').value === 'CUSTOM') {
+    selectedClient.clientName = document.getElementById('invCustomClient').value || 'Walk-in Client';
+    renderPreview();
+  }
+}
+
+function updateGST() {
+  const type = document.getElementById('invType').value;
+  const badge = document.getElementById('gstBadge');
+  if (type === 'NON_GST') {
+    badge.className = 'gst-badge gst-none mt-1';
+    badge.textContent = 'No GST';
+    document.getElementById('txCgstRow').style.display = 'none';
+    document.getElementById('txSgstRow').style.display = 'none';
+    document.getElementById('txIgstRow').style.display = 'none';
+  } else {
+    const isIntra = !selectedClient || selectedClient.stateCode === '08';
+    if (isIntra) {
+      badge.className = 'gst-badge gst-intra mt-1';
+      badge.textContent = 'CGST 9% + SGST 9% (Intra-State)';
+      document.getElementById('txCgstRow').style.display = '';
+      document.getElementById('txSgstRow').style.display = '';
+      document.getElementById('txIgstRow').style.display = 'none';
+    } else {
+      badge.className = 'gst-badge gst-inter mt-1';
+      badge.textContent = 'IGST 18% (Inter-State)';
+      document.getElementById('txCgstRow').style.display = 'none';
+      document.getElementById('txSgstRow').style.display = 'none';
+      document.getElementById('txIgstRow').style.display = '';
+    }
+  }
+  recalc();
+}
+
+// ── Line Items ───────────────────────────────────────────────────
+function addLine() {
+  const container = document.getElementById('lineItems');
+  const row = document.createElement('div');
+  row.className = 'line-row';
+  row.innerHTML = `
+    <input type="text" class="form-control desc" placeholder="e.g. Consulting Fees" oninput="recalc()">
+    <input type="text" class="form-control sac" value="998312" oninput="recalc()">
+    <input type="number" class="form-control qty" value="1" min="1" oninput="recalc()">
+    <input type="number" class="form-control rate" value="0" min="0" oninput="recalc()">
+    <input type="text" class="form-control amt" value="₹0" readonly>
+    <button class="del-line" onclick="this.parentElement.remove();recalc()"><i class="fa-solid fa-xmark"></i></button>
+  `;
+  container.appendChild(row);
+}
+
+function getLineItems() {
+  const rows = document.querySelectorAll('#lineItems .line-row');
+  const items = [];
+  rows.forEach(row => {
+    const desc = row.querySelector('.desc').value;
+    const sac  = row.querySelector('.sac').value;
+    const qty  = Number(row.querySelector('.qty').value) || 1;
+    const rate = Number(row.querySelector('.rate').value) || 0;
+    items.push({ description: desc, sacCode: sac, qty, rate, amount: qty*rate });
+  });
+  return items;
+}
+
+function recalc() {
+  const items = getLineItems();
+  let taxable = 0;
+  items.forEach((item, i) => {
+    taxable += item.amount;
+    const row = document.querySelectorAll('#lineItems .line-row')[i];
+    if (row) row.querySelector('.amt').value = INR(item.amount);
+  });
+
+  const type = document.getElementById('invType').value;
+  const isIntra = !selectedClient || selectedClient?.stateCode === '08';
+  let cgst=0, sgst=0, igst=0;
+  if (type === 'GST') {
+    if (isIntra) { cgst = Math.round(taxable*0.09*100)/100; sgst = cgst; }
+    else { igst = Math.round(taxable*0.18*100)/100; }
+  }
+  const total = Math.round((taxable+cgst+sgst+igst)*100)/100;
+
+  document.getElementById('txTaxable').textContent = INR(taxable);
+  document.getElementById('txCgst').textContent = INR(cgst);
+  document.getElementById('txSgst').textContent = INR(sgst);
+  document.getElementById('txIgst').textContent = INR(igst);
+  document.getElementById('txTotal').textContent = INR(total);
+  document.getElementById('txWords').textContent = numberToWords(Math.round(total));
+
+  renderPreview();
+}
+
+function numberToWords(num) {
+  if (!num) return '—';
+  const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
+    'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function cg(n) {
+    if (!n) return '';
+    if (n<20) return ones[n];
+    if (n<100) return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'');
+    return ones[Math.floor(n/100)]+' Hundred'+(n%100?' '+cg(n%100):'');
+  }
+  let r='';
+  const cr=Math.floor(num/10000000), lk=Math.floor((num%10000000)/100000), th=Math.floor((num%100000)/1000), rest=num%1000;
+  if(cr) r+=cg(cr)+' Crore '; if(lk) r+=cg(lk)+' Lakh ';
+  if(th) r+=cg(th)+' Thousand '; if(rest) r+=cg(rest);
+  return 'INR '+r.trim()+' Only';
+}
+
+// ── Save Invoice ─────────────────────────────────────────────────
+async function saveInvoice(sendStatus) {
+  const clientVal = document.getElementById('invClient').value;
+  let clientId = clientVal;
+  let customClientName = '';
+  
+  if (clientVal === 'CUSTOM') {
+    clientId = 'CUSTOM';
+    customClientName = document.getElementById('invCustomClient').value.trim();
+    if (!customClientName) { Swal.fire('Required','Please enter the custom client name.','warning'); return; }
+  } else if (!clientId) { 
+    Swal.fire('Required','Please select a client.','warning'); return; 
+  }
+
+  const items = getLineItems().filter(i => i.description.trim());
+  if (!items.length) { Swal.fire('Required','Add at least one line item.','warning'); return; }
+
+  const payload = {
+    clientId: clientId === 'CUSTOM' ? null : clientId,
+    customClientName,
+    taskId: taskData?._id || undefined,
+    invoiceType: document.getElementById('invType').value,
+    lineItems: items,
+    paymentTerms: document.getElementById('invTerms').value,
+    invoiceDate: document.getElementById('invDate').value,
+    notes: document.getElementById('invNotes').value
+  };
+
+  try {
+    const res = await fetch(`${API}/api/invoices`, {
+      method:'POST', headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+token },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (sendStatus === 'Sent') {
+        // Mark as sent
+        await fetch(`${API}/api/invoices/${data.invoice._id}/send`, {
+          method:'POST', headers:{Authorization:'Bearer '+token}
+        });
+      }
+      Swal.fire({ title:'Invoice Created!', html:`<strong>${data.invoice.invoiceNo}</strong><br>Total: ${INR(data.invoice.totalAmount)}`, icon:'success', confirmButtonColor:'#0F172A', confirmButtonText:'Download PDF' }).then(() => {
+        downloadPDF(data.invoice);
+      });
+    } else {
+      Swal.fire('Failed', data.error||'Could not create invoice.','error');
+    }
+  } catch(e) { Swal.fire('Error','Server unreachable.','error'); }
+}
+
+// ── Live Preview ─────────────────────────────────────────────────
+function renderPreview() {
+  const items = getLineItems();
+  const type = document.getElementById('invType').value;
+  const isIntra = !selectedClient || selectedClient?.stateCode === '08';
+  const date = document.getElementById('invDate').value || new Date().toISOString().split('T')[0];
+  
+  let taxable = 0;
+  items.forEach(i => taxable += i.amount);
+  let cgst=0, sgst=0, igst=0;
+  if (type==='GST') { if(isIntra){cgst=Math.round(taxable*0.09*100)/100;sgst=cgst;}else{igst=Math.round(taxable*0.18*100)/100;} }
+  const total = Math.round((taxable+cgst+sgst+igst)*100)/100;
+
+  const c = selectedClient;
+  const pa = document.getElementById('previewArea');
+  
+  if (!c) { pa.innerHTML = '<p class="text-muted text-center py-5">Select a client to see preview…</p>'; return; }
+
+  let itemsHtml = items.filter(i=>i.description).map((i,idx) =>
+    `<tr><td>${idx+1}</td><td><strong>${i.description}</strong></td><td>${i.sacCode}</td><td>${i.qty}</td><td>${i.rate.toLocaleString('en-IN')}</td><td>per</td><td style="text-align:right">${i.amount.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
+  ).join('');
+
+  if (type==='GST' && isIntra) {
+    itemsHtml += `<tr><td></td><td><strong style="color:#16A34A">CGST 9%</strong></td><td></td><td></td><td>9</td><td>%</td><td style="text-align:right">${cgst.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`;
+    itemsHtml += `<tr><td></td><td><strong style="color:#16A34A">SGST 9%</strong></td><td></td><td></td><td>9</td><td>%</td><td style="text-align:right">${sgst.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`;
+  } else if (type==='GST') {
+    itemsHtml += `<tr><td></td><td><strong style="color:#2563EB">IGST 18%</strong></td><td></td><td></td><td>18</td><td>%</td><td style="text-align:right">${igst.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`;
+  }
+
+  pa.innerHTML = `
+    <div style="text-align:center;font-weight:700;font-size:15px;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px;">Tax Invoice</div>
+    <table style="margin-bottom:8px;">
+      <tr><td style="width:55%;font-weight:700;font-size:13px;">AVPM & ASSOCIATES<br><span style="font-weight:400;font-size:11px;">11-K-3 SAHKAR MARG, JAIPUR 302015<br>GSTIN: 08ABKFA4108L1ZC<br>State: Rajasthan, Code: 08</span></td>
+      <td><strong>Invoice No.</strong><br>Auto-generated<br><strong>Dated</strong><br>${new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'})}</td></tr>
+    </table>
+    <table style="margin-bottom:8px;">
+      <tr><td colspan="2" style="background:#f0f0f0;font-weight:700;font-size:11px;">Buyer (Bill to)</td></tr>
+      <tr><td style="font-weight:700">${c.clientName}<br><span style="font-weight:400;font-size:11px;">${c.address||''}, ${c.city||''} ${c.pincode||''}</span></td>
+      <td style="font-size:11px;">GSTIN: ${c.gstin||'N/A'}<br>State: ${c.stateName||'—'}, Code: ${c.stateCode||'—'}</td></tr>
+    </table>
+    <table>
+      <thead><tr><th>SI</th><th>Particulars</th><th>HSN/SAC</th><th>Qty</th><th>Rate</th><th>per</th><th>Amount</th></tr></thead>
+      <tbody>${itemsHtml}</tbody>
+      <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700;">Total</td><td style="text-align:right;font-weight:700;font-size:14px;">₹ ${total.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr></tfoot>
+    </table>
+    <div style="font-size:11px;margin-top:6px;"><strong>Amount in Words:</strong> ${numberToWords(Math.round(total))}</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:15px;">
+      <div style="font-size:10px;">
+        <strong>Company's Bank Details:</strong><br>
+        Bank: <strong>State Bank of India</strong> | A/c: <strong>39601161082</strong> | IFSC: <strong>SBIN0015515</strong><br>
+        Branch: Kailashpuri Tonk Road
+      </div>
+      <div style="text-align:right; font-size:11px; position:relative;">
+        <div style="position:absolute; right:15px; top:-50px; border:2px dashed #2563EB; color:#2563EB; border-radius:50%; width:65px; height:65px; display:flex; flex-direction:column; justify-content:center; align-items:center; opacity:0.8; transform:rotate(-15deg); font-family:'Times New Roman',serif;">
+           <span style="font-weight:bold; font-size:11px; letter-spacing:0.5px;">Bookmyca</span>
+           <span style="font-size:7px;">VERIFIED</span>
+        </div>
+        <i style="color:#555">for AVPM & ASSOCIATES</i><br><br><br>Authorised Signatory
+      </div>
+    </div>
+    <div style="text-align:center;font-size:10px;color:#999;margin-top:10px;border-top:1px solid #ccc;padding-top:4px;">This is a Computer Generated Invoice</div>
+  `;
+}
+
+// ── PDF Generation ───────────────────────────────────────────────
+function previewPDF() {
+  const items = getLineItems().filter(i=>i.description);
+  if (!items.length || !selectedClient) { Swal.fire('Info','Select a client and add line items first.','info'); return; }
+  downloadPDF(null); // generate from form data
+}
+
+function downloadPDF(invoiceData) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','mm','a4');
+  const w = 210, m = 14;
+
+  const items = invoiceData ? invoiceData.lineItems : getLineItems().filter(i=>i.description);
+  const type = invoiceData ? invoiceData.invoiceType : document.getElementById('invType').value;
+  const c = selectedClient || {};
+  const isIntra = (c.stateCode||'08') === '08';
+
+  let taxable = 0;
+  items.forEach(i => taxable += (i.amount || i.qty*i.rate));
+  let cgst=0, sgst=0, igst=0;
+  if (type==='GST') { if(isIntra){cgst=Math.round(taxable*0.09*100)/100;sgst=cgst;}else{igst=Math.round(taxable*0.18*100)/100;} }
+  const total = Math.round((taxable+cgst+sgst+igst)*100)/100;
+
+  const invNo = invoiceData?.invoiceNo || 'DRAFT';
+  const invDate = invoiceData ? new Date(invoiceData.invoiceDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
+
+  // Title
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('Tax Invoice', w/2, 18, {align:'center'});
+  doc.setDrawColor(0); doc.line(m, 22, w-m, 22);
+
+  // Firm info
+  let y = 28;
+  doc.setFontSize(11); doc.text('AVPM & ASSOCIATES', m, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text('11-K-3 SAHKAR MARG, JAIPUR, RAJASTHAN 302015', m, y+4);
+  doc.text('GSTIN: 08ABKFA4108L1ZC | State: Rajasthan, Code: 08', m, y+8);
+  doc.text('Email: CAPIYUSHMITTAL80@GMAIL.COM', m, y+12);
+
+  // Invoice details (right side)
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('Invoice No:', w/2+15, y); doc.text(invNo, w/2+15, y+4);
+  doc.text('Dated:', w-m-30, y); doc.text(invDate, w-m-30, y+4);
+
+  y += 20;
+  doc.line(m, y, w-m, y);
+
+  // Client info
+  y += 5;
+  doc.setFontSize(8); doc.setFont('helvetica','bold');
+  doc.text('Buyer (Bill to)', m, y);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  y += 5;
+  doc.text(c.clientName || invoiceData?.clientName || '', m, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text([c.address||'', c.city||'', c.pincode||''].filter(Boolean).join(', ') || invoiceData?.clientAddress || '', m, y+4);
+  doc.text('GSTIN: '+(c.gstin||invoiceData?.clientGstin||'N/A'), m, y+8);
+  doc.text('State: '+(c.stateName||invoiceData?.clientState||'—')+', Code: '+(c.stateCode||invoiceData?.clientStateCode||'—'), m, y+12);
+
+  y += 20;
+  doc.line(m, y, w-m, y);
+
+  // Items table header
+  y += 5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8);
+  const cols = [m, m+8, m+65, m+95, m+112, m+130, m+145];
+  doc.text('SI', cols[0], y);
+  doc.text('Particulars', cols[1], y);
+  doc.text('HSN/SAC', cols[2], y);
+  doc.text('Qty', cols[3], y);
+  doc.text('Rate', cols[4], y);
+  doc.text('per', cols[5], y);
+  doc.text('Amount', cols[6], y);
+  y += 2; doc.line(m, y, w-m, y); y += 4;
+
+  // Items
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  items.forEach((item, i) => {
+    doc.text(String(i+1), cols[0], y);
+    doc.setFont('helvetica','bold');
+    doc.text(item.description || '', cols[1], y);
+    doc.setFont('helvetica','normal');
+    doc.text(item.sacCode || '998312', cols[2], y);
+    doc.text(String(item.qty||1), cols[3], y);
+    doc.text(String(item.rate||0), cols[4], y);
+    doc.text('per', cols[5], y);
+    doc.text((item.amount||0).toLocaleString('en-IN',{minimumFractionDigits:2}), cols[6], y);
+    y += 6;
+  });
+
+  // GST rows
+  if (type === 'GST' && isIntra) {
+    doc.setFont('helvetica','bold');
+    doc.text('CGST 9%', cols[1]+25, y); doc.text('9', cols[4], y); doc.text('%', cols[5], y); doc.text(cgst.toLocaleString('en-IN',{minimumFractionDigits:2}), cols[6], y); y+=6;
+    doc.text('SGST 9%', cols[1]+25, y); doc.text('9', cols[4], y); doc.text('%', cols[5], y); doc.text(sgst.toLocaleString('en-IN',{minimumFractionDigits:2}), cols[6], y); y+=6;
+  } else if (type === 'GST') {
+    doc.setFont('helvetica','bold');
+    doc.text('IGST 18%', cols[1]+25, y); doc.text('18', cols[4], y); doc.text('%', cols[5], y); doc.text(igst.toLocaleString('en-IN',{minimumFractionDigits:2}), cols[6], y); y+=6;
+  }
+
+  // Total
+  y += 2; doc.line(m, y, w-m, y); y += 5;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text('Total', cols[5]-10, y);
+  doc.text('₹ '+total.toLocaleString('en-IN',{minimumFractionDigits:2}), cols[6], y);
+
+  // Amount in words
+  y += 8;
+  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text('Amount Chargeable (in words):', m, y);
+  doc.setFont('helvetica','bold');
+  doc.text(numberToWords(Math.round(total)), m, y+4);
+
+  // Bank details
+  y += 16; doc.line(m, y, w-m, y); y += 5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  doc.text("Company's Bank Details", w/2-20, y);
+  y += 4;
+  doc.text('Bank Name      : State Bank of India', m+30, y);
+  doc.text('A/c No.           : 39601161082', m+30, y+4);
+  doc.text('Branch & IFS Code: Kailashpuri Tonk Road & SBIN0015515', m+30, y+8);
+
+  // Signature and Seal
+  y += 18;
+  doc.setFont('helvetica','italic');
+  doc.text('for AVPM & ASSOCIATES', w-m-60, y);
+  
+  // Draw Seal
+  doc.setDrawColor(37, 99, 235); // Blue
+  doc.setTextColor(37, 99, 235);
+  doc.setLineWidth(0.5);
+  doc.circle(w-m-25, y+2, 11, 'S'); 
+  doc.setFont('times','bold');
+  doc.setFontSize(9);
+  doc.text('Bookmyca', w-m-25, y+1, {align: 'center', angle: -15});
+  doc.setFontSize(5);
+  doc.setFont('times','normal');
+  doc.text('VERIFIED', w-m-25, y+4, {align: 'center', angle: -15});
+
+  doc.setTextColor(0,0,0);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  doc.text('Authorised Signatory', w-m-60, y+18);
+
+  // Footer
+  doc.setFontSize(7);
+  doc.text('This is a Computer Generated Invoice', w/2, 285, {align:'center'});
+
+  doc.save(`Invoice_${invNo.replace(/\//g,'-')}.pdf`);
+}
+</script>
+</body>
+</html>

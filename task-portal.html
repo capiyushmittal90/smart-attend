@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | My Task Dashboard</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- DataTables -->
+  <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --navy:    #0F172A;
+      --navy-h:  #1E293B;
+      --accent:  #38BDF8;
+      --bg:      #F1F5F9;
+      --border:  #E2E8F0;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: #334155; }
+
+    /* Navbar */
+    .navbar { background: var(--navy) !important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+
+    /* KPI Cards */
+    .kpi-card { border-radius:14px;transition:transform .3s,box-shadow .3s;position:relative;overflow:hidden; }
+    .kpi-card:hover { transform:translateY(-5px);box-shadow:0 16px 32px rgba(15,23,42,.1)!important; }
+    .kpi-lbl { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin-bottom:6px; }
+    .kpi-val { font-size:1.75rem;font-weight:700;margin:0; }
+    .kpi-ico { position:absolute;top:16px;right:16px;width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.2rem; }
+    .bg-pri-s { background:#E0E7FF; } .bg-suc-s { background:#DCFCE7; }
+    .bg-inf-s { background:#E0F2FE; } .bg-dan-s { background:#FEE2E2; }
+
+    /* Buttons */
+    .btn-navy { background:var(--navy);color:#fff;border:none;transition:background .2s,transform .2s; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff;transform:translateY(-1px); }
+    .btn-out-navy { border:1.5px solid var(--navy);color:var(--navy);background:transparent;transition:all .2s;font-size:.8rem; }
+    .btn-out-navy:hover { background:var(--navy);color:#fff; }
+
+    /* Pills */
+    .pill { display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;font-size:.74rem;font-weight:600;border:1px solid transparent; }
+    .p-green { background:#DCFCE7;color:#16A34A;border-color:#BBF7D0; }
+    .p-amber { background:#FEF9C3;color:#CA8A04;border-color:#FDE68A; }
+    .p-grey  { background:#F1F5F9;color:#64748B;border-color:#E2E8F0; }
+    .p-blue  { background:#EFF6FF;color:#2563EB;border-color:#BFDBFE; }
+    .p-red   { background:#FEF2F2;color:#DC2626;border-color:#FECACA; }
+
+    /* Table */
+    table.dataTable { border-collapse:collapse!important; }
+    table.dataTable thead th { font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748B;padding:14px 16px;border-bottom:2px solid var(--border)!important;background:#F8FAFC; }
+    table.dataTable tbody td { padding:13px 16px;border-bottom:1px solid var(--border);vertical-align:middle; }
+    .table-hover tbody tr:hover { background:#F8FAFC!important; }
+    .dataTables_filter input { border:1px solid var(--border);border-radius:8px;padding:6px 14px;background:#F8FAFC;margin-left:6px;outline:none; }
+    .dataTables_filter input:focus { border-color:#94A3B8; }
+    .dataTables_length select { border:1px solid var(--border);border-radius:8px;padding:4px 8px; }
+    .dataTables_paginate .paginate_button.current { background:var(--navy)!important;color:#fff!important;border-radius:6px;border:none!important; }
+    .dataTables_paginate .paginate_button:hover { background:#E2E8F0!important;color:var(--navy)!important;border:none!important; }
+
+    /* Form */
+    .form-control,.form-select { border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:.875rem;background:#fff;box-shadow:none!important;transition:border-color .2s; }
+    .form-control:focus,.form-select:focus { border-color:#94A3B8; }
+
+    /* Modal */
+    .modal-content { border-radius:16px!important;overflow:hidden; }
+    .modal-header.bg-navy { border-radius:0!important; }
+
+    /* Attendance quick-link button */
+    .att-link { background:#0EA5E9;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.8rem;font-weight:600;text-decoration:none;transition:background .2s; }
+    .att-link:hover { background:#0284C7;color:#fff; }
+
+    @media(max-width:576px){ .kpi-ico{display:none;} .kpi-val{font-size:1.3rem;} }
+  </style>
+</head>
+<body>
+
+<!-- ───── NAVBAR ───── -->
+<nav class="navbar navbar-expand-lg navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-chart-pie"></i></div>
+      <span class="fw-bold fs-5">Bookmyca <span class="text-white-50 fw-light">Work Portal</span></span>
+    </a>
+    <div class="d-flex align-items-center gap-3 text-white">
+      <a href="index.html#attendance" class="att-link"><i class="fa-solid fa-fingerprint me-1"></i>Attendance</a>
+      <a href="client-master.html" class="att-link" style="background:#6366F1;"><i class="fa-solid fa-address-book me-1"></i>Clients</a>
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-circle-user fs-4"></i>
+        <div>
+          <div class="fw-semibold small" id="userName">Loading…</div>
+          <div class="text-white-50" style="font-size:.7rem;" id="userCode"></div>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-light" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+
+  <!-- ── KPI ROW ── -->
+  <div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card card border-0 shadow-sm p-3 h-100">
+        <p class="kpi-lbl">Total Assigned</p>
+        <h2 class="kpi-val text-navy" id="k-total" style="color:var(--navy)">—</h2>
+        <div class="kpi-ico bg-pri-s text-primary"><i class="fa-solid fa-list-check"></i></div>
+      </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card card border-0 shadow-sm p-3 h-100">
+        <p class="kpi-lbl">Tasks Completed</p>
+        <h2 class="kpi-val text-success" id="k-done">—</h2>
+        <div class="kpi-ico bg-suc-s text-success"><i class="fa-solid fa-check-double"></i></div>
+      </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card card border-0 shadow-sm p-3 h-100">
+        <p class="kpi-lbl">Revenue Billed <span class="text-success fw-normal">(Received)</span></p>
+        <h2 class="kpi-val text-info" id="k-rev">—</h2>
+        <div class="kpi-ico bg-inf-s text-info"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+      </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+      <div class="kpi-card card border-0 shadow-sm p-3 h-100">
+        <p class="kpi-lbl">Collection Pending</p>
+        <h2 class="kpi-val text-danger" id="k-pend">—</h2>
+        <div class="kpi-ico bg-dan-s text-danger"><i class="fa-solid fa-wallet"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TABLE CARD ── -->
+  <div class="card border-0 shadow-sm" style="border-radius:14px;overflow:hidden;">
+    <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+      <h5 class="mb-0 fw-bold" style="color:var(--navy)"><i class="fa-solid fa-briefcase me-2"></i>My Tasks</h5>
+      <button class="btn btn-navy px-4 fw-semibold shadow-sm" onclick="openModal()">
+        <i class="fa-solid fa-plus me-2"></i>New Task
+      </button>
+    </div>
+    <div class="card-body p-4">
+      <div id="loader" class="text-center py-5">
+        <div class="spinner-border text-primary" style="width:3rem;height:3rem;"></div>
+        <p class="mt-3 text-muted fw-medium">Loading your tasks…</p>
+      </div>
+      <div id="tblWrap" style="display:none;" class="table-responsive">
+        <table id="taskTbl" class="table table-hover w-100">
+          <thead>
+            <tr>
+              <th>Task ID</th><th>Client</th><th>Service</th>
+              <th>Work Status</th><th>Final Fees</th>
+              <th>Invoice</th><th>Payment</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───── ADD / EDIT MODAL ───── -->
+<div class="modal fade" id="taskModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-navy text-white border-0" style="background:var(--navy)!important;">
+        <h5 class="modal-title fw-bold" id="mTitle">New Task</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body bg-light p-4">
+        <form id="taskForm" novalidate>
+          <input type="hidden" id="editId">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Client *</label>
+              <select class="form-select" id="f-client" required><option value="">— Select Client —</option></select>
+              <div class="mt-1"><a href="client-master.html" target="_blank" class="text-primary small"><i class="fa-solid fa-plus me-1"></i>Add new client</a></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Service Type</label>
+              <select class="form-select" id="f-service">
+                <option>GST</option><option>ITR</option><option>Audit</option>
+                <option>Subsidy</option><option>Accounting</option><option>Trademark</option><option>Other</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Sub-Service / Category (Optional)</label>
+              <input type="text" class="form-control" id="f-subservice" placeholder="e.g. Return Filing, Monthly...">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Work Status</label>
+              <select class="form-select" id="f-wstatus">
+                <option>Not Started</option><option>In Progress</option><option>Completed</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Invoice Status</label>
+              <select class="form-select" id="f-invoice">
+                <option>Not Raised</option><option>Raised</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small text-muted">Estimated Fees (₹)</label>
+              <input type="number" class="form-control" id="f-est" value="0" min="0">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small text-muted">Final Fees (₹)</label>
+              <input type="number" class="form-control" id="f-final" value="0" min="0">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small text-muted">Amount Received (₹)</label>
+              <input type="number" class="form-control" id="f-amtrcvd" value="0" min="0">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Payment Status</label>
+              <select class="form-select" id="f-pay">
+                <option>Pending</option><option>Partial</option><option>Received</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small text-muted">Notes (Optional)</label>
+              <input type="text" class="form-control" id="f-notes" placeholder="Any additional notes…">
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer bg-white border-0">
+        <button class="btn btn-light shadow-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-navy px-4 fw-semibold" id="saveBtn" onclick="saveTask()">
+          <i class="fa-solid fa-floppy-disk me-2"></i>Save Task
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+  // ── Config ──────────────────────────────────────────────────────
+  const API = '';   // Same origin — server runs at same host
+  const INR = new Intl.NumberFormat('en-IN',{ style:'currency',currency:'INR',maximumFractionDigits:0 });
+  let token = '', allTasks = [];
+
+  // ── Boot ────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    token = localStorage.getItem('sa_token');
+    if (!token) { window.location.href = 'index.html'; return; }
+
+    // Decode JWT payload to show name
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      // If admin navigates here accidentally, let them through but show name
+      document.getElementById('userName').textContent = payload.name || payload.email || 'Employee';
+      document.getElementById('userCode').textContent = payload.code || payload.dept || '';
+    } catch(_) {}
+
+    loadClients();
+    loadTasks();
+
+    // MANDATORY RULE: Completed → prompt invoice
+    document.getElementById('f-wstatus').addEventListener('change', function() {
+      if (this.value === 'Completed' && document.getElementById('f-invoice').value !== 'Raised') {
+        Swal.fire({
+          title:'Task Completed! 🎉',
+          text: 'Do you want to mark the Invoice as "Raised" now?',
+          icon:'question',
+          showCancelButton:true,
+          confirmButtonText:'Yes, Raise Invoice',
+          cancelButtonText:'Not Yet',
+          confirmButtonColor:'#0F172A'
+        }).then(r => {
+          if (r.isConfirmed) document.getElementById('f-invoice').value = 'Raised';
+        });
+      }
+    });
+  });
+
+  // ── Load Clients ──────────────────────────────────────────────────
+  let clientList = [];
+  async function loadClients() {
+    try {
+      const r = await fetch(`${API}/api/clients`,{headers:{Authorization:'Bearer '+token}});
+      const data = await r.json();
+      clientList = data.clients || [];
+      const sel = document.getElementById('f-client');
+      sel.innerHTML = '<option value="">— Select Client —</option>';
+      clientList.forEach(c => {
+        sel.innerHTML += `<option value="${c._id}" data-name="${c.clientName}">${c.clientName}${c.gstin?' ('+c.gstin+')':''}</option>`;
+      });
+    } catch(e) { console.error(e); }
+  }
+
+  // ── Load Tasks ───────────────────────────────────────────────────
+  async function loadTasks() {
+    $('#loader').show(); $('#tblWrap').hide();
+    try {
+      const res = await fetch(`${API}/api/tasks/my`, { headers:{ Authorization:'Bearer '+token } });
+      if (res.status === 401) { logout(); return; }
+      const data = await res.json();
+      allTasks = data.tasks || [];
+      renderKPIs(data.kpis);
+      renderTable(allTasks);
+    } catch(e) {
+      Swal.fire('Error','Could not connect to server.','error');
+    }
+  }
+
+  // ── KPIs ─────────────────────────────────────────────────────────
+  function renderKPIs(k) {
+    $('#k-total').text(k.totalAssigned);
+    $('#k-done').text(k.completed);
+    $('#k-rev').text(INR.format(k.revenueBilled));
+    $('#k-pend').text(INR.format(k.collectionPending));
+  }
+
+  // ── Table ────────────────────────────────────────────────────────
+  function renderTable(tasks) {
+    if ($.fn.DataTable.isDataTable('#taskTbl')) $('#taskTbl').DataTable().destroy();
+    const body = $('#tblBody').empty();
+    tasks.forEach(t => {
+      body.append(`<tr>
+        <td class="fw-semibold text-muted small">${t.taskId}</td>
+        <td class="fw-semibold">${t.clientName}</td>
+        <td>
+          <span class="badge bg-light text-dark border">${t.serviceType}</span>
+          ${t.subService ? `<br><small class="text-muted">${t.subService}</small>` : ''}
+        </td>
+        <td>${pStatus(t.workStatus)}</td>
+        <td class="fw-bold" style="color:var(--navy)">${INR.format(t.finalFees)}</td>
+        <td>${pInvoice(t.invoiceStatus)}</td>
+        <td>${pPay(t.paymentStatus)}</td>
+        <td>
+          <button class="btn btn-sm btn-out-navy me-1" onclick="editTask('${t._id}')">
+            <i class="fa-solid fa-pen me-1"></i>Edit
+          </button>
+          <button class="btn btn-sm" style="border:1.5px solid #2563EB;color:#2563EB;font-size:.8rem;" onclick="window.location.href='invoice-builder.html?taskId=${t._id}'">
+            <i class="fa-solid fa-file-invoice me-1"></i>Invoice
+          </button>
+        </td>
+      </tr>`);
+    });
+    $('#taskTbl').DataTable({ pageLength:10, order:[[0,'desc']], language:{ search:'', searchPlaceholder:'🔍 Search…', emptyTable:'No tasks yet. Click "New Task" to begin.' } });
+    $('#loader').hide(); $('#tblWrap').fadeIn(300);
+  }
+
+  // ── Badges ───────────────────────────────────────────────────────
+  function pStatus(s) {
+    if (s==='Completed')  return `<span class="pill p-green"><i class="fa-solid fa-circle-check me-1"></i>${s}</span>`;
+    if (s==='In Progress')return `<span class="pill p-amber"><i class="fa-solid fa-spinner fa-spin me-1"></i>${s}</span>`;
+    return `<span class="pill p-grey"><i class="fa-solid fa-clock me-1"></i>${s}</span>`;
+  }
+  function pInvoice(s) {
+    return s==='Raised'
+      ? `<span class="pill p-blue"><i class="fa-solid fa-file-invoice me-1"></i>Raised</span>`
+      : `<span class="pill p-red">Not Raised</span>`;
+  }
+  function pPay(s) {
+    if (s==='Received') return `<span class="pill p-green"><i class="fa-solid fa-check me-1"></i>Received</span>`;
+    if (s==='Partial')  return `<span class="pill p-amber">Partial</span>`;
+    return `<span class="pill p-red">Pending</span>`;
+  }
+
+  // ── Modal Open / Edit ────────────────────────────────────────────
+  function openModal() {
+    document.getElementById('taskForm').reset();
+    document.getElementById('editId').value = '';
+    document.getElementById('mTitle').textContent = 'New Task';
+    new bootstrap.Modal(document.getElementById('taskModal')).show();
+  }
+  function editTask(id) {
+    const t = allTasks.find(x => x._id === id);
+    if (!t) return;
+    document.getElementById('editId').value      = t._id;
+    document.getElementById('mTitle').textContent = 'Edit — ' + t.taskId;
+    document.getElementById('f-client').value    = t.clientId || '';
+    if (!document.getElementById('f-client').value && t.clientName) {
+      const sel = document.getElementById('f-client');
+      sel.innerHTML += `<option value="manual" data-name="${t.clientName}" selected>${t.clientName}</option>`;
+    }
+    document.getElementById('f-service').value   = t.serviceType;
+    document.getElementById('f-subservice').value= t.subService || '';
+    document.getElementById('f-wstatus').value   = t.workStatus;
+    document.getElementById('f-invoice').value   = t.invoiceStatus;
+    document.getElementById('f-est').value       = t.estimatedFees;
+    document.getElementById('f-final').value     = t.finalFees;
+    document.getElementById('f-amtrcvd').value   = t.amountReceived;
+    document.getElementById('f-pay').value       = t.paymentStatus;
+    document.getElementById('f-notes').value     = t.notes || '';
+    new bootstrap.Modal(document.getElementById('taskModal')).show();
+  }
+
+  // ── Save (Create / Update) ───────────────────────────────────────
+  async function saveTask() {
+    const clientSel = document.getElementById('f-client');
+    const clientId  = clientSel.value;
+    const clientOpt = clientSel.selectedOptions[0];
+    const clientName = clientOpt?.dataset?.name || clientOpt?.textContent || '';
+    if (!clientId) { Swal.fire('Required','Please select a client.','warning'); return; }
+
+    const btn = document.getElementById('saveBtn');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Saving…';
+    btn.disabled = true;
+
+    const id = document.getElementById('editId').value;
+    const payload = {
+      clientId:      clientId,
+      clientName:    clientName,
+      serviceType:   document.getElementById('f-service').value,
+      subService:    document.getElementById('f-subservice').value,
+      workStatus:    document.getElementById('f-wstatus').value,
+      invoiceStatus: document.getElementById('f-invoice').value,
+      estimatedFees: document.getElementById('f-est').value,
+      finalFees:     document.getElementById('f-final').value,
+      amountReceived:document.getElementById('f-amtrcvd').value,
+      paymentStatus: document.getElementById('f-pay').value,
+      notes:         document.getElementById('f-notes').value
+    };
+
+    const url    = id ? `/api/tasks/${id}` : `/api/tasks`;
+    const method = id ? 'PUT' : 'POST';
+
+    try {
+      const res  = await fetch(url, { method, headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body:JSON.stringify(payload) });
+      const data = await res.json();
+      bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide();
+      if (data.success) {
+        Swal.fire({ title:'Saved!', text:data.message, icon:'success', confirmButtonColor:'#0F172A' });
+        loadTasks();
+      } else {
+        Swal.fire('Failed', data.error || 'Could not save task.','error');
+      }
+    } catch(e) {
+      Swal.fire('Error','Server unreachable.','error');
+    } finally {
+      btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-2"></i>Save Task';
+      btn.disabled = false;
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem('sa_token');
+    window.location.href = 'index.html';
+  }
+</script>
+</body>
+</html>

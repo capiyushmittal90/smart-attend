@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | Reports Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .navbar { background:var(--navy)!important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+    .btn-navy { background:var(--navy);color:#fff;border:none;transition:all .2s; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff; }
+    .form-control,.form-select { border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:.875rem;background:#fff;box-shadow:none!important; }
+    .rpt-card { background:#fff;border-radius:14px;border:1px solid var(--border);padding:20px;margin-bottom:16px; }
+    .section-title { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin-bottom:12px; }
+
+    .kpi-strip { display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px; }
+    .kpi-box { background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 20px;flex:1;min-width:150px;text-align:center; }
+    .kpi-val { font-size:1.5rem;font-weight:700;display:block; }
+    .kpi-lbl { font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:#64748B;font-weight:600; }
+
+    .nav-pills .nav-link { color:#64748B;font-weight:600;font-size:.85rem;border-radius:8px;padding:8px 16px; }
+    .nav-pills .nav-link.active { background:var(--navy);color:#fff; }
+
+    table.dataTable thead th { font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#64748B;padding:12px;border-bottom:2px solid var(--border)!important;background:#F8FAFC; }
+    table.dataTable tbody td { padding:10px 12px;border-bottom:1px solid var(--border);font-size:.85rem; }
+    .dataTables_filter input { border:1px solid var(--border);border-radius:8px;padding:6px 14px; }
+    .dataTables_paginate .paginate_button.current { background:var(--navy)!important;color:#fff!important;border-radius:6px;border:none!important; }
+
+    .aging-bar { height:8px;border-radius:99px;overflow:hidden;background:#F1F5F9;margin-bottom:4px; }
+    .aging-fill { height:100%;border-radius:99px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-chart-bar"></i></div>
+      <span class="fw-bold fs-5">Bookmyca <span class="text-white-50 fw-light">Reports</span></span>
+    </a>
+    <div class="d-flex gap-2">
+      <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-shield-halved me-1"></i>Hub</a>
+      <a href="client-master.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-address-book me-1"></i>Clients</a>
+      <a href="invoice-builder.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-file-invoice me-1"></i>Invoice</a>
+      <a href="index.html#attendance" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-fingerprint me-1"></i>Attendance</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+
+  <!-- KPI Strip -->
+  <div class="kpi-strip" id="kpiStrip">
+    <div class="kpi-box"><span class="kpi-val" style="color:var(--navy)" id="rk-invoices">—</span><span class="kpi-lbl">Total Invoices</span></div>
+    <div class="kpi-box"><span class="kpi-val text-info" id="rk-billed">—</span><span class="kpi-lbl">Total Billed</span></div>
+    <div class="kpi-box"><span class="kpi-val text-success" id="rk-received">—</span><span class="kpi-lbl">Received</span></div>
+    <div class="kpi-box"><span class="kpi-val text-danger" id="rk-outstanding">—</span><span class="kpi-lbl">Outstanding</span></div>
+    <div class="kpi-box"><span class="kpi-val text-warning" id="rk-payments">—</span><span class="kpi-lbl">Payment Entries</span></div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="rpt-card">
+    <div class="d-flex flex-wrap gap-3 align-items-end">
+      <div>
+        <label class="form-label fw-semibold small text-muted mb-1">Period</label>
+        <select class="form-select" id="fPeriod" onchange="onPeriodChange()">
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month" selected>This Month</option>
+          <option value="quarter">This Quarter</option>
+          <option value="year">This Financial Year</option>
+          <option value="custom">Custom Range</option>
+        </select>
+      </div>
+      <div id="customRange" style="display:none;">
+        <label class="form-label fw-semibold small text-muted mb-1">From</label>
+        <input type="date" class="form-control" id="fFrom">
+      </div>
+      <div id="customRange2" style="display:none;">
+        <label class="form-label fw-semibold small text-muted mb-1">To</label>
+        <input type="date" class="form-control" id="fTo">
+      </div>
+      <button class="btn btn-navy px-4 fw-semibold" onclick="loadReport()"><i class="fa-solid fa-search me-1"></i>Generate</button>
+      <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-light border fw-medium" onclick="exportCSV()"><i class="fa-solid fa-file-csv me-1 text-success"></i>Excel</button>
+        <button class="btn btn-light border fw-medium" onclick="exportPDF()"><i class="fa-solid fa-file-pdf me-1 text-danger"></i>PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Tabs -->
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link active" href="#" onclick="switchTab('revenue',this)"><i class="fa-solid fa-indian-rupee-sign me-1"></i>Revenue</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('invoices',this)"><i class="fa-solid fa-file-invoice me-1"></i>Invoices</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('payments',this)"><i class="fa-solid fa-money-bill me-1"></i>Payments</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('aging',this)"><i class="fa-solid fa-clock me-1"></i>Invoice Aging</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('gst',this)"><i class="fa-solid fa-building-columns me-1"></i>GST Summary</a></li>
+  </ul>
+
+  <!-- Tab: Revenue -->
+  <div id="tab-revenue" class="rpt-card">
+    <div class="table-responsive"><table id="revTbl" class="table w-100"><thead><tr><th>Employee</th><th>Tasks</th><th>Completed</th><th>Billed</th><th>Received</th><th>Outstanding</th></tr></thead><tbody id="revBody"></tbody></table></div>
+  </div>
+
+  <!-- Tab: Invoices -->
+  <div id="tab-invoices" class="rpt-card" style="display:none;">
+    <div class="table-responsive"><table id="invTbl" class="table w-100"><thead><tr><th>Invoice No</th><th>Date</th><th>Client</th><th>Type</th><th>Taxable</th><th>Tax</th><th>Total</th><th>Status</th></tr></thead><tbody id="invBody"></tbody></table></div>
+  </div>
+
+  <!-- Tab: Payments -->
+  <div id="tab-payments" class="rpt-card" style="display:none;">
+    <div class="table-responsive"><table id="payTbl" class="table w-100"><thead><tr><th>Date</th><th>Invoice</th><th>Client</th><th>Amount</th><th>Mode</th><th>Reference</th><th>Recorded By</th></tr></thead><tbody id="payBody"></tbody></table></div>
+  </div>
+
+  <!-- Tab: Invoice Aging -->
+  <div id="tab-aging" class="rpt-card" style="display:none;">
+    <div class="row g-3" id="agingCards"></div>
+  </div>
+
+  <!-- Tab: GST Summary -->
+  <div id="tab-gst" class="rpt-card" style="display:none;">
+    <div class="table-responsive"><table id="gstTbl" class="table w-100"><thead><tr><th>Invoice No</th><th>Client</th><th>GSTIN</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th></tr></thead><tbody id="gstBody"></tbody></table></div>
+  </div>
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+const API='', INR=n=>'₹'+Number(n||0).toLocaleString('en-IN');
+let token='', invoices=[], payments=[], tasks=[], activeTab='revenue';
+
+window.addEventListener('DOMContentLoaded', async()=>{
+  token=localStorage.getItem('sa_token');
+  if(!token){window.location.href='index.html';return;}
+  // Admin check
+  try{const p=JSON.parse(atob(token.split('.')[1]));if(p.type!=='admin'&&p.role!=='superadmin'){Swal.fire('Access','Admin only','error').then(()=>window.location.href='index.html');return;}}catch(_){}
+  loadReport();
+});
+
+function getDateRange(){
+  const p=document.getElementById('fPeriod').value;
+  const now=new Date();
+  let from,to;
+  if(p==='today'){from=to=now.toISOString().split('T')[0];}
+  else if(p==='week'){const d=new Date(now);d.setDate(d.getDate()-d.getDay());from=d.toISOString().split('T')[0];to=now.toISOString().split('T')[0];}
+  else if(p==='month'){from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];to=now.toISOString().split('T')[0];}
+  else if(p==='quarter'){const q=Math.floor(now.getMonth()/3)*3;from=new Date(now.getFullYear(),q,1).toISOString().split('T')[0];to=now.toISOString().split('T')[0];}
+  else if(p==='year'){const fy=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;from=`${fy}-04-01`;to=now.toISOString().split('T')[0];}
+  else{from=document.getElementById('fFrom').value;to=document.getElementById('fTo').value;}
+  return {from,to};
+}
+
+function onPeriodChange(){
+  const custom=document.getElementById('fPeriod').value==='custom';
+  document.getElementById('customRange').style.display=custom?'':'none';
+  document.getElementById('customRange2').style.display=custom?'':'none';
+}
+
+async function loadReport(){
+  const {from,to}=getDateRange();
+  const hdrs={Authorization:'Bearer '+token};
+  try{
+    // Fetch each independently so one failure doesn't kill all reports
+    let invD={invoices:[]}, payD={payments:[]}, taskD={tasks:[]};
+    try{const r=await fetch(`${API}/api/invoices`,{headers:hdrs});invD=await r.json();}catch(_){}
+    try{const r=await fetch(`${API}/api/payments?startDate=${from}&endDate=${to}`,{headers:hdrs});payD=await r.json();}catch(_){}
+    try{const r=await fetch(`${API}/api/tasks/all`,{headers:hdrs});taskD=await r.json();}catch(_){}
+    invoices=invD.invoices||[];
+    payments=payD.payments||[];
+    tasks=taskD.tasks||[];
+
+    // Filter invoices by date range
+    if(from) invoices=invoices.filter(i=>new Date(i.invoiceDate)>=new Date(from));
+    if(to) invoices=invoices.filter(i=>new Date(i.invoiceDate)<=new Date(to+'T23:59:59'));
+
+    renderKPIs(); renderRevenue(); renderInvoices(); renderPayments(); renderAging(); renderGST();
+  }catch(e){console.error('Report error:',e);}
+}
+
+function renderKPIs(){
+  const billed=invoices.reduce((s,i)=>s+(i.status!=='Cancelled'?i.totalAmount:0),0);
+  const paid=invoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+i.totalAmount,0);
+  const payTotal=payments.reduce((s,p)=>s+p.amount,0);
+  document.getElementById('rk-invoices').textContent=invoices.length;
+  document.getElementById('rk-billed').textContent=INR(billed);
+  document.getElementById('rk-received').textContent=INR(payTotal);
+  document.getElementById('rk-outstanding').textContent=INR(billed-payTotal);
+  document.getElementById('rk-payments').textContent=payments.length;
+}
+
+function renderRevenue(){
+  if($.fn.DataTable.isDataTable('#revTbl'))$('#revTbl').DataTable().destroy();
+  const empMap={};
+  tasks.forEach(t=>{
+    if(!empMap[t.staffId])empMap[t.staffId]={name:t.staffName,total:0,done:0,billed:0,received:0};
+    empMap[t.staffId].total++;
+    if(t.workStatus==='Completed')empMap[t.staffId].done++;
+    empMap[t.staffId].billed+=t.finalFees||0;
+    empMap[t.staffId].received+=t.amountReceived||0;
+  });
+  const body=$('#revBody').empty();
+  Object.values(empMap).forEach(e=>{
+    body.append(`<tr><td class="fw-semibold">${e.name}</td><td>${e.total}</td><td class="text-success fw-bold">${e.done}</td><td class="fw-bold">${INR(e.billed)}</td><td class="text-success">${INR(e.received)}</td><td class="text-danger fw-bold">${INR(e.billed-e.received)}</td></tr>`);
+  });
+  $('#revTbl').DataTable({pageLength:25,order:[[3,'desc']],language:{search:'',searchPlaceholder:'🔍 Search…'}});
+}
+
+function renderInvoices(){
+  if($.fn.DataTable.isDataTable('#invTbl'))$('#invTbl').DataTable().destroy();
+  const body=$('#invBody').empty();
+  invoices.forEach(i=>{
+    const tax=i.cgstAmt+i.sgstAmt+i.igstAmt;
+    const stBadge = i.status==='Paid'?'bg-success':i.status==='Cancelled'?'bg-secondary':i.status==='PartiallyPaid'?'bg-warning text-dark':'bg-info';
+    body.append(`<tr><td class="fw-semibold">${i.invoiceNo}</td><td>${new Date(i.invoiceDate).toLocaleDateString('en-IN')}</td><td>${i.clientName}</td><td>${i.invoiceType}</td><td>${INR(i.taxableAmount)}</td><td>${INR(tax)}</td><td class="fw-bold">${INR(i.totalAmount)}</td><td><span class="badge ${stBadge}">${i.status}</span></td></tr>`);
+  });
+  $('#invTbl').DataTable({pageLength:25,order:[[1,'desc']],language:{search:'',searchPlaceholder:'🔍 Search…'}});
+}
+
+function renderPayments(){
+  if($.fn.DataTable.isDataTable('#payTbl'))$('#payTbl').DataTable().destroy();
+  const body=$('#payBody').empty();
+  payments.forEach(p=>{
+    const inv=invoices.find(i=>i._id===String(p.invoiceId));
+    body.append(`<tr><td>${new Date(p.paymentDate).toLocaleDateString('en-IN')}</td><td class="fw-semibold">${inv?.invoiceNo||'—'}</td><td>${inv?.clientName||'—'}</td><td class="fw-bold text-success">${INR(p.amount)}</td><td><span class="badge bg-light text-dark border">${p.paymentMode}</span></td><td class="small text-muted">${p.referenceNo||'—'}</td><td class="small">${p.recordedByName||'—'}</td></tr>`);
+  });
+  $('#payTbl').DataTable({pageLength:25,order:[[0,'desc']],language:{search:'',searchPlaceholder:'🔍 Search…'}});
+}
+
+function renderAging(){
+  const now=new Date();
+  const buckets={'0-30':{total:0,count:0},'30-60':{total:0,count:0},'60-90':{total:0,count:0},'90+':{total:0,count:0}};
+  const unpaid=invoices.filter(i=>i.status!=='Paid'&&i.status!=='Cancelled');
+  unpaid.forEach(i=>{
+    const days=Math.floor((now-new Date(i.invoiceDate))/(86400000));
+    if(days<=30)      {buckets['0-30'].total+=i.totalAmount;buckets['0-30'].count++;}
+    else if(days<=60) {buckets['30-60'].total+=i.totalAmount;buckets['30-60'].count++;}
+    else if(days<=90) {buckets['60-90'].total+=i.totalAmount;buckets['60-90'].count++;}
+    else              {buckets['90+'].total+=i.totalAmount;buckets['90+'].count++;}
+  });
+  const grandTotal=Object.values(buckets).reduce((s,b)=>s+b.total,0)||1;
+  const colors={'0-30':'#16A34A','30-60':'#CA8A04','60-90':'#EA580C','90+':'#DC2626'};
+  document.getElementById('agingCards').innerHTML=Object.entries(buckets).map(([k,v])=>{
+    const pct=Math.round((v.total/grandTotal)*100);
+    return `<div class="col-md-3"><div class="rpt-card text-center"><div class="fw-bold small text-muted mb-2">${k} Days</div><div class="fw-bold" style="font-size:1.4rem;color:${colors[k]}">${INR(v.total)}</div><div class="small text-muted">${v.count} invoices</div><div class="aging-bar mt-2"><div class="aging-fill" style="width:${pct}%;background:${colors[k]}"></div></div></div></div>`;
+  }).join('');
+}
+
+function renderGST(){
+  if($.fn.DataTable.isDataTable('#gstTbl'))$('#gstTbl').DataTable().destroy();
+  const body=$('#gstBody').empty();
+  const gstInvoices=invoices.filter(i=>i.invoiceType==='GST'&&i.status!=='Cancelled');
+  gstInvoices.forEach(i=>{
+    body.append(`<tr><td class="fw-semibold">${i.invoiceNo}</td><td>${i.clientName}</td><td class="small">${i.clientGstin||'—'}</td><td>${INR(i.taxableAmount)}</td><td>${INR(i.cgstAmt)}</td><td>${INR(i.sgstAmt)}</td><td>${INR(i.igstAmt)}</td><td class="fw-bold">${INR(i.totalAmount)}</td></tr>`);
+  });
+  // Footer totals
+  const totals=gstInvoices.reduce((s,i)=>({tax:s.tax+i.taxableAmount,cg:s.cg+i.cgstAmt,sg:s.sg+i.sgstAmt,ig:s.ig+i.igstAmt,tot:s.tot+i.totalAmount}),{tax:0,cg:0,sg:0,ig:0,tot:0});
+  body.append(`<tr style="font-weight:700;background:#F8FAFC"><td colspan="3">TOTAL</td><td>${INR(totals.tax)}</td><td>${INR(totals.cg)}</td><td>${INR(totals.sg)}</td><td>${INR(totals.ig)}</td><td>${INR(totals.tot)}</td></tr>`);
+  $('#gstTbl').DataTable({pageLength:50,paging:false,language:{search:'',searchPlaceholder:'🔍 Search…'}});
+}
+
+function switchTab(tab,el){
+  document.querySelectorAll('.nav-pills .nav-link').forEach(a=>a.classList.remove('active'));
+  el.classList.add('active');
+  ['revenue','invoices','payments','aging','gst'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  activeTab=tab;return false;
+}
+
+function exportCSV(){
+  let headers=[],rows=[];
+  if(activeTab==='revenue'){
+    headers=['Employee','Tasks','Completed','Billed','Received','Outstanding'];
+    document.querySelectorAll('#revBody tr').forEach(tr=>{const cells=[...tr.cells].map(c=>c.textContent);rows.push(cells.join(','));});
+  }else if(activeTab==='invoices'){
+    headers=['Invoice No','Date','Client','Type','Taxable','Tax','Total','Status'];
+    document.querySelectorAll('#invBody tr').forEach(tr=>{const cells=[...tr.cells].map(c=>c.textContent);rows.push(cells.join(','));});
+  }else if(activeTab==='payments'){
+    headers=['Date','Invoice','Client','Amount','Mode','Reference','Recorded By'];
+    document.querySelectorAll('#payBody tr').forEach(tr=>{const cells=[...tr.cells].map(c=>c.textContent);rows.push(cells.join(','));});
+  }else if(activeTab==='gst'){
+    headers=['Invoice','Client','GSTIN','Taxable','CGST','SGST','IGST','Total'];
+    document.querySelectorAll('#gstBody tr').forEach(tr=>{const cells=[...tr.cells].map(c=>c.textContent);rows.push(cells.join(','));});
+  }else{Swal.fire('Info','Aging report cannot be exported as CSV.','info');return;}
+  const csv=[headers.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`bookmyca_${activeTab}_${Date.now()}.csv`;a.click();
+}
+
+function exportPDF(){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF('l','mm','a4');
+  doc.setFont('helvetica','bold');doc.setFontSize(14);
+  doc.text('Bookmyca — '+activeTab.charAt(0).toUpperCase()+activeTab.slice(1)+' Report',14,15);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text('Generated: '+new Date().toLocaleString('en-IN'),14,21);
+
+  let tblId='#revTbl';
+  if(activeTab==='invoices')tblId='#invTbl';
+  else if(activeTab==='payments')tblId='#payTbl';
+  else if(activeTab==='gst')tblId='#gstTbl';
+  else if(activeTab==='aging'){Swal.fire('Info','Use CSV for aging report.','info');return;}
+
+  doc.autoTable({html:tblId,startY:28,styles:{fontSize:8},headStyles:{fillColor:[15,23,42]}});
+  doc.save(`bookmyca_${activeTab}_${Date.now()}.pdf`);
+}
+</script>
+</body>
+</html>

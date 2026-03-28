@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | Agreement Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .navbar { background:var(--navy)!important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+    .btn-navy { background:var(--navy);color:#fff;border:none;transition:all .2s; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff; }
+    .form-control,.form-select { border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:.875rem;background:#fff;box-shadow:none!important; }
+    .builder-card { background:#fff;border-radius:14px;border:1px solid var(--border);padding:24px;margin-bottom:20px; }
+    .section-title { font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin-bottom:12px; }
+    .preview-page { background:#fff;border:1px solid #ccc;padding:40px;font-family:'Times New Roman',serif;font-size:14px;line-height:1.8;max-height:600px;overflow-y:auto; }
+    .preview-page h2 { text-align:center;font-weight:700;margin-bottom:20px;text-decoration:underline; }
+    .scope-item { display:flex;gap:10px;align-items:center;margin-bottom:6px; }
+    .scope-item input { flex:1; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-file-contract"></i></div>
+      <span class="fw-bold fs-5">Bookmyca <span class="text-white-50 fw-light">Agreement Generator</span></span>
+    </a>
+    <div class="d-flex gap-2">
+      <a href="task-portal.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-briefcase me-1"></i>Tasks</a>
+      <a href="client-master.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-address-book me-1"></i>Clients</a>
+      <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-shield-halved me-1"></i>Hub</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+  <div class="row">
+
+    <!-- LEFT: Form -->
+    <div class="col-lg-5">
+      <div class="builder-card">
+        <p class="section-title"><i class="fa-solid fa-file-signature me-1"></i>Document Type</p>
+        <select class="form-select mb-3" id="docType" onchange="renderPreview()">
+          <option value="agreement">Engagement Letter / Agreement</option>
+          <option value="noc">No Objection Certificate (NOC)</option>
+        </select>
+      </div>
+
+      <div class="builder-card">
+        <p class="section-title"><i class="fa-solid fa-building me-1"></i>Client Details</p>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold small text-muted">Select Client</label>
+            <select class="form-select" id="agClient" onchange="onClientSelect()"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small text-muted">Client GSTIN / PAN</label>
+            <input type="text" class="form-control" id="agClientGstin" placeholder="e.g. 08XXXXX... or PAN" oninput="renderPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small text-muted">Client Address</label>
+            <input type="text" class="form-control" id="agClientAddress" placeholder="e.g. 123 Street, City" oninput="renderPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small text-muted">Authorized Person</label>
+            <input type="text" class="form-control" id="agPerson" placeholder="e.g. Mr. Rahul Sharma" oninput="renderPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small text-muted">Designation</label>
+            <input type="text" class="form-control" id="agDesig" placeholder="e.g. Director" oninput="renderPreview()">
+          </div>
+        </div>
+      </div>
+
+      <div class="builder-card">
+        <p class="section-title"><i class="fa-solid fa-handshake me-1"></i>Engagement Details</p>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small text-muted">Start Date</label>
+            <input type="date" class="form-control" id="agStart" oninput="renderPreview()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small text-muted">End Date</label>
+            <input type="date" class="form-control" id="agEnd" oninput="renderPreview()">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label fw-semibold small text-muted">Assigned Team Member</label>
+            <input type="text" class="form-control" id="agTeam" placeholder="e.g. CA Piyush Mittal" oninput="renderPreview()">
+          </div>
+        </div>
+      </div>
+
+      <div class="builder-card" id="scopeSection">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p class="section-title mb-0"><i class="fa-solid fa-list-check me-1"></i>Scope of Work</p>
+          <button class="btn btn-sm btn-navy" onclick="addScope()"><i class="fa-solid fa-plus me-1"></i>Add</button>
+        </div>
+        <div id="scopeItems">
+          <div class="scope-item">
+            <input type="text" class="form-control" value="GST Return Filing (Monthly/Quarterly)" oninput="renderPreview()">
+            <button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="scope-item">
+            <input type="text" class="form-control" value="Income Tax Return Filing" oninput="renderPreview()">
+            <button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="scope-item">
+            <input type="text" class="form-control" value="Tax Planning & Advisory" oninput="renderPreview()">
+            <button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="builder-card" id="feeSection">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p class="section-title mb-0"><i class="fa-solid fa-indian-rupee-sign me-1"></i>Fee Structure</p>
+          <button class="btn btn-sm btn-navy" onclick="addFeeRow()"><i class="fa-solid fa-plus me-1"></i>Add</button>
+        </div>
+        <div id="feeItems">
+          <div class="fee-item d-flex gap-2 mb-2">
+            <input type="text" class="form-control" placeholder="Particular (e.g. Loan Sanction)" style="flex:2" oninput="renderPreview()">
+            <select class="form-select" style="flex:1" onchange="renderPreview()">
+               <option value="fixed">Fixed (₹)</option>
+               <option value="percent">Percent (%)</option>
+            </select>
+            <input type="number" class="form-control" placeholder="Rate/Amount" style="flex:1" oninput="renderPreview()">
+            <button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOC specific -->
+      <div class="builder-card" id="nocSection" style="display:none;">
+        <p class="section-title"><i class="fa-solid fa-certificate me-1"></i>NOC Details</p>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold small text-muted">NOC Purpose</label>
+            <input type="text" class="form-control" id="nocPurpose" placeholder="e.g. Transfer of GST Registration" oninput="renderPreview()">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold small text-muted">NOC for (Person/Entity)</label>
+            <input type="text" class="form-control" id="nocFor" placeholder="e.g. CA Rahul Sharma" oninput="renderPreview()">
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-3">
+        <button class="btn btn-navy px-4 fw-semibold" onclick="downloadAgreementPDF('download')">
+          <i class="fa-solid fa-download me-2"></i>Download PDF
+        </button>
+        <button class="btn btn-outline-secondary px-4 fw-semibold" onclick="downloadAgreementPDF('preview')">
+          <i class="fa-solid fa-file-pdf me-2"></i>Preview PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Preview -->
+    <div class="col-lg-7">
+      <div class="builder-card" style="position:sticky;top:20px;">
+        <p class="section-title"><i class="fa-solid fa-eye me-1"></i>Live Preview</p>
+        <div class="preview-page" id="previewArea"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+const API = '';
+let token='', clientList=[], selectedClient=null;
+const FIRM = { name:'Aayu Consulting Group Pvt Ltd', address:'11-K-3 Sahkar Marg, Jaipur, Rajasthan 302015', gstin:'08ABKFA4108L1ZC', email:'capiyushmittal80@gmail.com' };
+
+window.addEventListener('DOMContentLoaded', async () => {
+  token = localStorage.getItem('sa_token');
+  if (!token) { window.location.href='index.html'; return; }
+  document.getElementById('agStart').valueAsDate = new Date();
+  const end = new Date(); end.setFullYear(end.getFullYear()+1);
+  document.getElementById('agEnd').valueAsDate = end;
+  document.getElementById('docType').addEventListener('change', function() {
+    document.getElementById('scopeSection').style.display = this.value==='agreement'?'':'none';
+    if(document.getElementById('feeSection')) document.getElementById('feeSection').style.display = this.value==='agreement'?'':'none';
+    document.getElementById('nocSection').style.display = this.value==='noc'?'':'none';
+  });
+  await loadClients();
+  renderPreview();
+});
+
+async function loadClients() {
+  try {
+    const r = await fetch(`${API}/api/clients`,{headers:{Authorization:'Bearer '+token}});
+    const data = await r.json();
+    clientList = data.clients||[];
+    const sel = document.getElementById('agClient');
+    sel.innerHTML = '<option value="">— Select Client —</option>';
+    clientList.forEach(c => { sel.innerHTML += `<option value="${c._id}">${c.clientName}${c.gstin?' ('+c.gstin+')':''}</option>`; });
+  } catch(e) { console.error(e); }
+}
+
+function onClientSelect() {
+  const id = document.getElementById('agClient').value;
+  selectedClient = clientList.find(c=>c._id===id)||null;
+  if (selectedClient) {
+    document.getElementById('agPerson').value = selectedClient.contactPerson || '';
+    document.getElementById('agClientGstin').value = selectedClient.gstin || selectedClient.pan || '';
+    document.getElementById('agClientAddress').value = [selectedClient.address, selectedClient.city, selectedClient.pincode].filter(Boolean).join(', ') || '';
+  }
+  renderPreview();
+}
+
+function addScope() {
+  const div = document.createElement('div');
+  div.className = 'scope-item';
+  div.innerHTML = `<input type="text" class="form-control" placeholder="Service description…" oninput="renderPreview()"><button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>`;
+  document.getElementById('scopeItems').appendChild(div);
+}
+
+function getScopes() {
+  return Array.from(document.querySelectorAll('#scopeItems .scope-item input')).map(i=>i.value).filter(v=>v.trim());
+}
+
+function addFeeRow() {
+  const div = document.createElement('div');
+  div.className = 'fee-item d-flex gap-2 mb-2';
+  div.innerHTML = `<input type="text" class="form-control" placeholder="Particular (e.g. Loan Sanction)" style="flex:2" oninput="renderPreview()"><select class="form-select" style="flex:1" onchange="renderPreview()"><option value="fixed">Fixed (₹)</option><option value="percent">Percent (%)</option></select><input type="number" class="form-control" placeholder="Rate/Amount" style="flex:1" oninput="renderPreview()"><button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>`;
+  document.getElementById('feeItems').appendChild(div);
+}
+
+function getFees() {
+  return Array.from(document.querySelectorAll('#feeItems .fee-item')).map(row => {
+    const inputs = row.querySelectorAll('input, select');
+    return {
+      particular: inputs[0].value.trim(),
+      type: inputs[1].value,
+      value: inputs[2].value
+    };
+  }).filter(f => f.particular);
+}
+
+function fmtDate(v) {
+  if (!v) return '___________';
+  return new Date(v).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+}
+
+function renderPreview() {
+  const type = document.getElementById('docType').value;
+  const c = selectedClient;
+  const pa = document.getElementById('previewArea');
+
+  if (type === 'agreement') {
+    const scopes = getScopes();
+    const scopeList = scopes.map((s,i)=>`<li>${s}</li>`).join('');
+    pa.innerHTML = `
+      <div style="text-align:center;margin-bottom:24px;">
+        <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
+        <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin} | Email: ${FIRM.email}</p>
+      </div>
+      <h2>ENGAGEMENT LETTER / AGREEMENT</h2>
+      <p><strong>Date:</strong> ${fmtDate(document.getElementById('agStart').value)}</p>
+      <p><strong>To,</strong><br>
+      <strong>${c?.clientName||'[Client Name]'}</strong><br>
+      ${document.getElementById('agClientAddress').value || '[Address]'}<br>
+      GSTIN/PAN: ${document.getElementById('agClientGstin').value || 'N/A'}<br>
+      Attn: <strong>${document.getElementById('agPerson').value||'[Authorized Person]'}</strong>, ${document.getElementById('agDesig').value||'[Designation]'}</p>
+
+      <p>Dear Sir/Madam,</p>
+      <p>We are pleased to confirm our engagement as your Chartered Accountants and Professional Consultants. This letter sets out the terms under which <strong>${FIRM.name}</strong> shall provide professional services.</p>
+
+      <h3 style="font-size:15px;text-decoration:underline;">1. SCOPE OF WORK</h3>
+      <ol>${scopeList || '<li>[Please add scope items]</li>'}</ol>
+
+      <h3 style="font-size:15px;text-decoration:underline;">2. TERM</h3>
+      <p>This engagement shall commence from <strong>${fmtDate(document.getElementById('agStart').value)}</strong> and continue until <strong>${fmtDate(document.getElementById('agEnd').value)}</strong>, unless terminated earlier by either party with 30 days written notice.</p>
+
+      <h3 style="font-size:15px;text-decoration:underline;">3. PROFESSIONAL FEES</h3>
+      <p>The professional fees for the above scope of services shall be as follows, exclusive of applicable GST:</p>
+      <ul style="margin:8px 0;">${
+        getFees().length ? getFees().map(f => {
+           let amtStr = f.type === 'percent' ? `${f.value}%` : `₹${Number(f.value||0).toLocaleString('en-IN')}/-`;
+           return `<li><strong>${f.particular}:</strong> ${amtStr}</li>`;
+        }).join('') : '<li>[Please add fee details]</li>'
+      }</ul>
+      <p>Payment shall be made as per the agreed payment schedule. Any delay beyond due date will attract interest at 18% p.a.</p>
+
+      <h3 style="font-size:15px;text-decoration:underline;">4. DEPARTMENTAL FEES & LIAISONING</h3>
+      <p>This is to bring to your kind attention that our professional fees, as agreed upon in our engagement letter or as billed periodically, are strictly in respect of the professional services rendered by us. These services include, but are not limited to, advisory, representation, compliance, and documentation.</p>
+      <p>Please note that any liaisoning fees, government levies, statutory charges, or any other amounts demanded by any regulatory authority, government department, or statutory body (collectively referred to as "Departmental Fees") are not included in our professional fees.</p>
+      <p>Such Departmental Fees shall be borne entirely by you. Whenever any such demand is raised by the concerned department or authority, you will be required to make the payment separately, either directly to the department or through us, as per the specific demand raised. Our office will promptly inform you of any such demand or levy, and the same shall be payable in addition to our professional fees.</p>
+      <p>We request you to kindly take note of the above and acknowledge the same for your records and future reference.</p>
+
+      <h3 style="font-size:15px;text-decoration:underline;">5. RESPONSIBILITIES OF THE CLIENT</h3>
+      <ul><li>Provide all necessary documents and information in a timely manner</li><li>Ensure accuracy and completeness of information provided</li><li>Make payments as per agreed terms</li></ul>
+
+      <h3 style="font-size:15px;text-decoration:underline;">6. CONFIDENTIALITY</h3>
+      <p>Both parties agree to maintain strict confidentiality of all information shared during the course of this engagement.</p>
+
+      <h3 style="font-size:15px;text-decoration:underline;">7. JURISDICTION</h3>
+      <p>Any dispute arising out of this agreement shall be subject to the exclusive jurisdiction of courts at Jaipur, Rajasthan.</p>
+
+      <div style="margin-top:40px;">
+        <div style="display:flex;justify-content:space-between;">
+          <div style="width:45%;">
+            <p><strong>For ${FIRM.name}</strong></p>
+            <br><br>
+            <p style="border-top:1px solid #333;padding-top:4px;">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
+          </div>
+          <div style="width:45%;">
+            <p><strong>For ${c?.clientName||'[Client Name]'}</strong></p>
+            <br><br>
+            <p style="border-top:1px solid #333;padding-top:4px;">${document.getElementById('agPerson').value||'[Authorized Person]'}<br>${document.getElementById('agDesig').value||'[Designation]'}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  } else {
+    // NOC
+    pa.innerHTML = `
+      <div style="text-align:center;margin-bottom:24px;">
+        <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
+        <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin}</p>
+      </div>
+      <h2>NO OBJECTION CERTIFICATE</h2>
+      <p><strong>Date:</strong> ${fmtDate(new Date().toISOString().split('T')[0])}</p>
+      <p><strong>To Whomsoever It May Concern,</strong></p>
+      <p>This is to certify that <strong>${FIRM.name}</strong> has no objection to <strong>${document.getElementById('nocFor').value||'[Person/Entity Name]'}</strong> for the purpose of <strong>${document.getElementById('nocPurpose').value||'[Purpose]'}</strong>.</p>
+      <p>We confirm that all our engagements and dues with <strong>${c?.clientName||'[Client Name]'}</strong>${c?.gstin?' (GSTIN: '+c.gstin+')':''} have been settled satisfactorily to date.</p>
+      <p>This certificate is issued upon the specific request of the above-mentioned party and does not create any liability or obligation on <strong>${FIRM.name}</strong>.</p>
+      <div style="margin-top:40px;text-align:right;">
+        <p><strong>For ${FIRM.name}</strong></p>
+        <br><br>
+        <p style="border-top:1px solid #333;display:inline-block;padding-top:4px;">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
+      </div>
+    `;
+  }
+}
+
+function numberToWords(num) {
+  if (!num) return 'Zero';
+  const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
+    'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function cg(n){if(!n)return'';if(n<20)return ones[n];if(n<100)return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'');return ones[Math.floor(n/100)]+' Hundred'+(n%100?' '+cg(n%100):'');}
+  let r='';
+  const cr=Math.floor(num/10000000),lk=Math.floor((num%10000000)/100000),th=Math.floor((num%100000)/1000),rest=num%1000;
+  if(cr)r+=cg(cr)+' Crore ';if(lk)r+=cg(lk)+' Lakh ';if(th)r+=cg(th)+' Thousand ';if(rest)r+=cg(rest);
+  return 'Rupees '+r.trim()+' Only';
+}
+
+function downloadAgreementPDF(action = 'download') {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','mm','a4');
+  const type = document.getElementById('docType').value;
+  const c = selectedClient || {};
+  const m = 20; let y = 25;
+
+  // Header
+  doc.setFont('times','bold'); doc.setFontSize(16);
+  doc.text(FIRM.name, 105, y, {align:'center'});
+  doc.setFont('times','normal'); doc.setFontSize(9);
+  y += 6; doc.text(FIRM.address, 105, y, {align:'center'});
+  y += 4; doc.text('GSTIN: '+FIRM.gstin+' | Email: '+FIRM.email, 105, y, {align:'center'});
+
+  y += 10; doc.setDrawColor(0); doc.line(m, y, 210-m, y);
+
+  if (type === 'agreement') {
+    y += 10; doc.setFont('times','bold'); doc.setFontSize(14);
+    doc.text('ENGAGEMENT LETTER / AGREEMENT', 105, y, {align:'center'});
+    doc.setFont('times','normal'); doc.setFontSize(11);
+
+    y += 10; doc.text('Date: '+fmtDate(document.getElementById('agStart').value), m, y);
+    y += 8; doc.text('To,', m, y);
+    y += 6; doc.setFont('times','bold'); doc.text(c.clientName||'[Client]', m, y);
+    doc.setFont('times','normal');
+    y += 5; doc.text(document.getElementById('agClientAddress').value || '[Address]', m, y);
+    y += 5; doc.text('GSTIN/PAN: '+(document.getElementById('agClientGstin').value || 'N/A'), m, y);
+    y += 5; doc.text('Attn: '+(document.getElementById('agPerson').value||'—')+', '+(document.getElementById('agDesig').value||''), m, y);
+
+    y += 10; doc.text('Dear Sir/Madam,', m, y);
+    y += 6;
+    const intro = doc.splitTextToSize('We are pleased to confirm our engagement as your Chartered Accountants and Professional Consultants. This letter sets out the terms under which '+FIRM.name+' shall provide professional services.', 170);
+    doc.text(intro, m, y); y += intro.length*5;
+
+    y += 6; doc.setFont('times','bold'); doc.text('1. SCOPE OF WORK', m, y);
+    doc.setFont('times','normal'); y += 6;
+    const scopes = getScopes();
+    scopes.forEach((s,i) => { doc.text((i+1)+'. '+s, m+5, y); y += 5; if(y>270){doc.addPage();y=20;} });
+
+    y += 4; doc.setFont('times','bold'); doc.text('2. TERM', m, y);
+    doc.setFont('times','normal'); y += 6;
+    const term = doc.splitTextToSize('This engagement shall commence from '+fmtDate(document.getElementById('agStart').value)+' and continue until '+fmtDate(document.getElementById('agEnd').value)+'.', 170);
+    doc.text(term, m, y); y += term.length*5;
+
+    y += 6; doc.setFont('times','bold'); doc.text('3. PROFESSIONAL FEES', m, y);
+    doc.setFont('times','normal'); y += 6;
+    doc.text('The professional fees for the above scope of services shall be as follows, exclusive of GST:', m, y);
+    y += 6;
+    const feeArr = getFees();
+    if(feeArr.length===0){
+        doc.text('[Please add fee details]', m+5, y); y += 6;
+    }else{
+        feeArr.forEach(f => {
+           let amtStr = f.type === 'percent' ? `${f.value}%` : `Rs. ${Number(f.value||0).toLocaleString('en-IN')}/-`;
+           doc.text(`- ${f.particular}: ${amtStr}`, m+5, y);
+           y += 5; if(y>270){doc.addPage();y=20;}
+        });
+        y += 1;
+    }
+
+    y += 8; if(y>270){doc.addPage();y=20;}
+    doc.setFont('times','bold'); doc.text('4. DEPARTMENTAL FEES & LIAISONING', m, y);
+    doc.setFont('times','normal'); y += 6;
+    const clauseLines = [
+        "This is to bring to your kind attention that our professional fees, as agreed upon in our engagement letter or as billed periodically, are strictly in respect of the professional services rendered by us. These services include, but are not limited to, advisory, representation, compliance, and documentation.",
+        "Please note that any liaisoning fees, government levies, statutory charges, or any other amounts demanded by any regulatory authority, government department, or statutory body (collectively referred to as \"Departmental Fees\") are not included in our professional fees.",
+        "Such Departmental Fees shall be borne entirely by you. Whenever any such demand is raised by the concerned department or authority, you will be required to make the payment separately, either directly to the department or through us, as per the specific demand raised. Our office will promptly inform you of any such demand or levy, and the same shall be payable in addition to our professional fees.",
+        "We request you to kindly take note of the above and acknowledge the same for your records and future reference."
+    ];
+    clauseLines.forEach(para => {
+        const splitPara = doc.splitTextToSize(para, 170);
+        if (y + splitPara.length*5 > 280) { doc.addPage(); y = 20; }
+        doc.text(splitPara, m, y);
+        y += splitPara.length*5 + 4;
+    });
+
+    if (y > 240) { doc.addPage(); y = 20; }
+    y += 12;
+    doc.setFont('times','bold');
+    doc.text('For '+FIRM.name, m, y);
+    doc.text('For '+(c.clientName||'[Client]'), 120, y);
+    y += 20;
+    doc.line(m, y, m+60, y); doc.line(120, y, 190, y);
+    y += 5; doc.setFont('times','normal');
+    doc.text('Authorized Signatory', m, y); doc.text(document.getElementById('agPerson').value||'Authorized Signatory', 120, y);
+    y += 5; doc.text(document.getElementById('agTeam').value||'', m, y); doc.text(document.getElementById('agDesig').value||'', 120, y);
+  } else {
+    // NOC
+    y += 10; doc.setFont('times','bold'); doc.setFontSize(14);
+    doc.text('NO OBJECTION CERTIFICATE', 105, y, {align:'center'});
+    doc.setFont('times','normal'); doc.setFontSize(11);
+    y += 10; doc.text('Date: '+fmtDate(new Date().toISOString().split('T')[0]), m, y);
+    y += 8; doc.text('To Whomsoever It May Concern,', m, y);
+    y += 8;
+    const body = doc.splitTextToSize('This is to certify that '+FIRM.name+' has no objection to '+(document.getElementById('nocFor').value||'[Person]')+' for the purpose of '+(document.getElementById('nocPurpose').value||'[Purpose]')+'.', 170);
+    doc.text(body, m, y); y += body.length*5+4;
+    const body2 = doc.splitTextToSize('We confirm that all engagements and dues with '+(c.clientName||'[Client]')+' have been settled satisfactorily.', 170);
+    doc.text(body2, m, y); y += body2.length*5;
+    y += 20; doc.setFont('times','bold');
+    doc.text('For '+FIRM.name, 120, y);
+    y += 20; doc.line(120, y, 190, y);
+    y += 5; doc.setFont('times','normal');
+    doc.text('Authorized Signatory', 120, y);
+  }
+
+  const fname = type==='agreement' ? 'Agreement' : 'NOC';
+  
+  if (action === 'preview') {
+    window.open(doc.output('bloburl'), '_blank');
+  } else {
+    doc.save(`${fname}_${(c.clientName||'draft').replace(/\s+/g,'_')}_${Date.now()}.pdf`);
+    Swal.fire({title:'PDF Downloaded!',icon:'success',timer:1500,showConfirmButton:false});
+  }
+}
+</script>
+</body>
+</html>

@@ -49,6 +49,10 @@
                 <input type="email" id="edit-email" class="form-input">
             </div>
             <div class="form-group">
+                <label class="form-label">Monthly Salary (₹)</label>
+                <input type="number" id="edit-salary" class="form-input">
+            </div>
+            <div class="form-group">
                 <label class="form-label">Shift</label>
                 <input type="text" id="edit-shift" class="form-input" placeholder="General">
             </div>
@@ -87,24 +91,13 @@
                     <span class="logo-icon">👤</span>
                 </div>
                 <h1>Employee Login</h1>
-                <p class="subtitle">Enter your registered email to get OTP</p>
+                <p class="subtitle">Enter your email and password to log in</p>
 
-                <!-- Step 1: Enter Email -->
                 <div id="emp-login-step1">
                     <input type="email" id="emp-login-email" class="form-input" placeholder="Your Email Address">
-                    <button id="btn-emp-send-otp" class="btn btn-primary btn-lg" onclick="empSendOTP()">📨 Send
-                        OTP</button>
-                </div>
-
-                <!-- Step 2: Enter OTP -->
-                <div id="emp-login-step2" style="display:none;">
-                    <p class="otp-info">OTP sent to <strong id="emp-otp-name"></strong></p>
-                    <input type="hidden" id="emp-otp-email-store">
-                    <input type="text" id="emp-otp-input" class="form-input otp-field" maxlength="4"
-                        placeholder="● ● ● ●" autocomplete="off">
-                    <button class="btn btn-accent btn-lg" onclick="empVerifyOTP()">✅ Verify & Login</button>
-                    <button class="btn btn-ghost" onclick="document.getElementById('emp-login-step1').style.display='block'; document.getElementById('emp-login-step2').style.display='none';">← Change
-                        Email</button>
+                    <br>
+                    <div class="password-wrap"><input type="password" id="emp-login-password" class="form-input" placeholder="Your Password" style="margin-top:10px;"><button type="button" class="eye-btn" onclick="togglePwd('emp-login-password', this)">👁️</button></div>
+                    <button id="btn-emp-login" class="btn btn-primary btn-lg" onclick="empLogin(event)" style="margin-top:15px;">👤 Log In</button>
                 </div>
 
                 <button class="btn btn-ghost" onclick="showScreen('screen-main')">← Back</button>
@@ -130,7 +123,13 @@
                         Check-In</button>
                     <button id="btn-emp-checkout" class="btn btn-accent sidebar-btn" onclick="startEmpCheckout()">🚪
                         Check-Out</button>
+                    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:15px 0;">
+                    <button id="btn-emp-web-checkin" class="btn sidebar-btn" style="background:#4A5568;color:#fff;" onclick="empWebCheckMark('IN')">🌐 Web Check-In</button>
+                    <button id="btn-emp-web-checkout" class="btn sidebar-btn" style="background:#4A5568;color:#fff;margin-top:8px;" onclick="empWebCheckMark('OUT')">🌐 Web Check-Out</button>
                 </div>
+                <a href="task-portal.html" class="btn sidebar-btn" style="background:#38BDF8;color:#0F172A;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:8px;">📋 My Task Dashboard</a>
+                <a href="client-master.html" class="btn sidebar-btn" style="background:#6366F1;color:#fff;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:6px;">📇 Client Master</a>
+                <a href="invoice-builder.html" class="btn sidebar-btn" style="background:#2563EB;color:#fff;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:6px;">🧾 Create Invoice</a>
                 <button class="btn btn-ghost sidebar-back" onclick="logout()">🚪 Logout</button>
             </aside>
             <main class="content-area">
@@ -185,7 +184,8 @@
                                     <th>Time</th>
                                     <th>Type</th>
                                     <th>Status</th>
-                                    <th>Location</th>
+                                    <th>Photo</th>
+                                    <th>Location & Map</th>
                                 </tr>
                             </thead>
                             <tbody id="emp-logs-tbody"></tbody>
@@ -247,7 +247,7 @@
                 <p class="subtitle">Enter your credentials to continue</p>
                 <form onsubmit="adminLogin(); return false;">
                     <input type="email" id="admin-email" class="form-input" placeholder="Admin Email">
-                    <input type="password" id="admin-pass" class="form-input" placeholder="Password">
+                    <div class="password-wrap"><input type="password" id="admin-pass" class="form-input" placeholder="Password"><button type="button" class="eye-btn" onclick="togglePwd('admin-pass', this)">👁️</button></div>
                     <button type="submit" class="btn btn-primary btn-lg">Sign In</button>
                 </form>
                 <button class="btn btn-ghost" onclick="showScreen('screen-main')">← Cancel</button>
@@ -260,117 +260,216 @@
         <div class="layout-split">
             <aside class="sidebar">
                 <div class="sidebar-brand">
-                    <span class="sidebar-icon">⚙️</span>
-                    <h2>Admin<br><span class="gold">Portal</span></h2>
+                    <span class="sidebar-icon">🏢</span>
+                    <h2>Bookmyca<br><span class="gold">Suite</span></h2>
                 </div>
                 <p class="admin-greeting">Welcome, <strong id="admin-welcome-name">Admin</strong>
                     <span class="badge badge-role" id="admin-role-badge">admin</span>
                 </p>
                 <nav class="sidebar-nav">
-                    <button class="btn btn-nav" id="tab-btn-dashboard" onclick="switchTab('dashboard')">📊
-                        Dashboard</button>
-                    <button class="btn btn-nav" id="tab-btn-staff" onclick="switchTab('staff')">👥 Manage
-                        Staff</button>
-                    <button class="btn btn-nav" id="tab-btn-reports" onclick="switchTab('reports')">📋 Reports</button>
-                    <button class="btn btn-nav" id="tab-btn-leaves" onclick="switchTab('leaves')">📝 Leave
-                        Requests</button>
-                    <button class="btn btn-nav" id="tab-btn-settings" onclick="switchTab('settings')">⏰
-                        Settings</button>
-                    <button class="btn btn-nav" id="tab-btn-admins" onclick="switchTab('admins')">🔑 Manage
-                        Admins</button>
+                    <button class="btn btn-nav" id="tab-btn-dashboard" onclick="switchTab('dashboard')">🏠 Home</button>
+                    <button class="btn btn-nav" id="tab-btn-settings" onclick="switchTab('settings')">⚙️ Office Setup</button>
+                    <button class="btn btn-nav" id="tab-btn-admins" onclick="switchTab('admins')">🔑 Manage Admins</button>
                 </nav>
                 <button class="btn btn-ghost sidebar-back" onclick="logout()">🚪 Logout</button>
             </aside>
 
             <main class="content-area">
 
-                <!-- ======== TAB: DASHBOARD ======== -->
+                <!-- ======== TAB: DASHBOARD (MODULE HUB) ======== -->
                 <div id="tab-dashboard" class="tab-panel">
-                    <h2 class="page-title">📊 Dashboard</h2>
-                    <!-- Stat Cards -->
-                    <div class="dash-stats-grid">
-                        <div class="dash-stat-card">
-                            <span class="dash-num" id="dash-total-staff">0</span>
-                            <span class="dash-label">Total Staff</span>
+                    <h2 class="page-title">🏢 Bookmyca Management Suite</h2>
+
+                    <!-- ===== MODULE HUB - Big Colorful Cards ===== -->
+                    <div class="module-hub">
+                        <!-- Card 1: Smart Attend (Attendance & HR) -->
+                        <div class="module-card mc-attendance" onclick="switchTab('attendance')" style="cursor:pointer;">
+                            <div class="mc-icon-ring"><span>📋</span></div>
+                            <div class="mc-info">
+                                <h3>Smart Attend</h3>
+                                <p>Attendance, staff management, leaves & HR analytics</p>
+                            </div>
+                            <div class="mc-stats">
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-att-staff">—</span><span class="mc-stat-lbl">Staff</span></div>
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-att-present">—</span><span class="mc-stat-lbl">Present</span></div>
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-att-absent">—</span><span class="mc-stat-lbl">Absent</span></div>
+                            </div>
+                            <div class="mc-arrow">→</div>
                         </div>
-                        <div class="dash-stat-card present">
-                            <span class="dash-num" id="dash-present">0</span>
-                            <span class="dash-label">Present Today</span>
-                        </div>
-                        <div class="dash-stat-card absent">
-                            <span class="dash-num" id="dash-absent">0</span>
-                            <span class="dash-label">Absent</span>
-                        </div>
-                        <div class="dash-stat-card late">
-                            <span class="dash-num" id="dash-late">0</span>
-                            <span class="dash-label">Late Today</span>
-                        </div>
-                        <div class="dash-stat-card ontime">
-                            <span class="dash-num" id="dash-ontime">0</span>
-                            <span class="dash-label">On Time</span>
-                        </div>
-                        <div class="dash-stat-card leave-stat">
-                            <span class="dash-num" id="dash-leaves">0</span>
-                            <span class="dash-label">On Leave</span>
-                        </div>
-                        <div class="dash-stat-card hours">
-                            <span class="dash-num" id="dash-avg-hours">0h</span>
-                            <span class="dash-label">Avg Hours</span>
-                        </div>
-                        <div class="dash-stat-card pending">
-                            <span class="dash-num" id="dash-pending-leaves">0</span>
-                            <span class="dash-label">Pending Leaves</span>
-                        </div>
+
+                        <!-- Card 2: Task Management -->
+                        <a href="admin-tasks.html" class="module-card mc-tasks">
+                            <div class="mc-icon-ring"><span>💼</span></div>
+                            <div class="mc-info">
+                                <h3>Task Management</h3>
+                                <p>Track work progress, assign tasks & monitor deadlines</p>
+                            </div>
+                            <div class="mc-stats">
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-tasks-total">—</span><span class="mc-stat-lbl">Tasks</span></div>
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-tasks-pending">—</span><span class="mc-stat-lbl">Pending</span></div>
+                            </div>
+                            <div class="mc-arrow">→</div>
+                        </a>
+
+                        <!-- Card 3: Client Master -->
+                        <a href="client-master.html" class="module-card mc-clients">
+                            <div class="mc-icon-ring"><span>📇</span></div>
+                            <div class="mc-info">
+                                <h3>Client Directory</h3>
+                                <p>Manage client database, GSTINs & contact details</p>
+                            </div>
+                            <div class="mc-stats">
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-clients-total">—</span><span class="mc-stat-lbl">Clients</span></div>
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-clients-gst">—</span><span class="mc-stat-lbl">With GST</span></div>
+                            </div>
+                            <div class="mc-arrow">→</div>
+                        </a>
+
+                        <!-- Card 4: Invoice Builder -->
+                        <a href="invoice-builder.html" class="module-card mc-invoices">
+                            <div class="mc-icon-ring"><span>🧾</span></div>
+                            <div class="mc-info">
+                                <h3>Invoice Builder</h3>
+                                <p>Generate professional GST invoices with PDF export</p>
+                            </div>
+                            <div class="mc-stats">
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-inv-total">—</span><span class="mc-stat-lbl">Invoices</span></div>
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-inv-billed">—</span><span class="mc-stat-lbl">Billed</span></div>
+                            </div>
+                            <div class="mc-arrow">→</div>
+                        </a>
+
+                        <!-- Card 5: Reports & Analytics -->
+                        <a href="reports.html" class="module-card mc-reports">
+                            <div class="mc-icon-ring"><span>📊</span></div>
+                            <div class="mc-info">
+                                <h3>Reports & Analytics</h3>
+                                <p>Revenue, aging, GST summaries & export options</p>
+                            </div>
+                            <div class="mc-stats">
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-rev-received">—</span><span class="mc-stat-lbl">Received</span></div>
+                                <div class="mc-stat"><span class="mc-stat-val" id="hub-rev-outstanding">—</span><span class="mc-stat-lbl">Due</span></div>
+                            </div>
+                            <div class="mc-arrow">→</div>
+                        </a>
+
+                        <!-- Card 6: Agreement Generator -->
+                        <a href="agreement-builder.html" class="module-card mc-agreements">
+                            <div class="mc-icon-ring"><span>📝</span></div>
+                            <div class="mc-info">
+                                <h3>Agreement / NOC</h3>
+                                <p>Draft engagement letters, NOCs & professional documents</p>
+                            </div>
+                            <div class="mc-stats">
+                                <div class="mc-stat"><span class="mc-stat-val">Ready</span><span class="mc-stat-lbl">Templates</span></div>
+                            </div>
+                            <div class="mc-arrow">→</div>
+                        </a>
+
+
                     </div>
-                    <!-- Charts -->
-                    <div class="charts-grid">
-                        <div class="chart-card glass">
-                            <h3>Weekly Attendance</h3>
-                            <div class="chart-container">
-                                <canvas id="weekly-chart"></canvas>
+                </div>
+
+                <!-- ======== TAB: ATTENDANCE (Smart Attend Module) ======== -->
+                <div id="tab-attendance" class="tab-panel">
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('dashboard')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Back to Hub</button>
+                        <h2 class="page-title" style="margin:0;">📋 Smart Attend</h2>
+                    </div>
+                    <!-- Attendance Sub-Navigation -->
+                    <div class="att-sub-nav">
+                        <button class="att-sub-btn active" id="att-sub-overview" onclick="switchAttSub('overview')">📊 Overview</button>
+                        <button class="att-sub-btn" id="att-sub-staff" onclick="switchAttSub('staff')">👥 Manage Staff</button>
+                        <button class="att-sub-btn" id="att-sub-reports" onclick="switchAttSub('reports')">📋 Att. Reports</button>
+                        <button class="att-sub-btn" id="att-sub-leaves" onclick="switchAttSub('leaves')">📝 Leave Requests</button>
+                    </div>
+
+                    <!-- Sub: Overview -->
+                    <div id="att-panel-overview" class="att-sub-panel">
+                        <div class="dash-stats-grid">
+                            <div class="dash-stat-card">
+                                <span class="dash-num" id="dash-total-staff">0</span>
+                                <span class="dash-label">Total Staff</span>
+                            </div>
+                            <div class="dash-stat-card present">
+                                <span class="dash-num" id="dash-present">0</span>
+                                <span class="dash-label">Present Today</span>
+                            </div>
+                            <div class="dash-stat-card absent">
+                                <span class="dash-num" id="dash-absent">0</span>
+                                <span class="dash-label">Absent</span>
+                            </div>
+                            <div class="dash-stat-card late">
+                                <span class="dash-num" id="dash-late">0</span>
+                                <span class="dash-label">Late Today</span>
+                            </div>
+                            <div class="dash-stat-card ontime">
+                                <span class="dash-num" id="dash-ontime">0</span>
+                                <span class="dash-label">On Time</span>
+                            </div>
+                            <div class="dash-stat-card leave-stat">
+                                <span class="dash-num" id="dash-leaves">0</span>
+                                <span class="dash-label">On Leave</span>
+                            </div>
+                            <div class="dash-stat-card hours">
+                                <span class="dash-num" id="dash-avg-hours">0h</span>
+                                <span class="dash-label">Avg Hours</span>
+                            </div>
+                            <div class="dash-stat-card pending">
+                                <span class="dash-num" id="dash-pending-leaves">0</span>
+                                <span class="dash-label">Pending Leaves</span>
                             </div>
                         </div>
-                        <div class="chart-card glass">
-                            <h3>Department Breakdown (Today)</h3>
-                            <div class="chart-container small">
-                                <canvas id="dept-chart"></canvas>
+                        <div class="charts-grid">
+                            <div class="chart-card glass">
+                                <h3>Weekly Attendance</h3>
+                                <div class="chart-container">
+                                    <canvas id="weekly-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-card glass">
+                                <h3>Department Breakdown (Today)</h3>
+                                <div class="chart-container small">
+                                    <canvas id="dept-chart"></canvas>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <!-- Top Late -->
-                    <div class="form-card glass">
-                        <h3>🏃 Top Late Arrivals (This Month)</h3>
-                        <table class="att-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Employee</th>
-                                    <th>Late Days</th>
-                                </tr>
-                            </thead>
-                            <tbody id="top-late-tbody"></tbody>
-                        </table>
-                    </div>
-                    <!-- Absent Employees Today -->
-                    <div class="form-card glass" style="margin-top: 20px;">
-                        <h3>❌ Absent / Not Checked-In Today</h3>
-                        <table class="att-table">
-                            <thead>
-                                <tr>
-                                    <th>Code</th>
-                                    <th>Name</th>
-                                    <th>Department</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="absent-tbody"></tbody>
-                        </table>
+                        <div class="form-card glass">
+                            <h3>🏃 Top Late Arrivals (This Month)</h3>
+                            <table class="att-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Employee</th>
+                                        <th>Late Days</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="top-late-tbody"></tbody>
+                            </table>
+                        </div>
+                        <div class="form-card glass" style="margin-top: 20px;">
+                            <h3>❌ Absent / Not Checked-In Today</h3>
+                            <table class="att-table">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th>Department</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="absent-tbody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
                 <!-- ======== TAB: MANAGE STAFF ======== -->
                 <div id="tab-staff" class="tab-panel">
-                    <h2 class="page-title">Register Employee</h2>
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('attendance')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Smart Attend</button>
+                        <h2 class="page-title" style="margin:0;">👥 Manage Staff</h2>
+                    </div>
                     <div class="form-card glass" id="staff-form-card">
                         <form id="staff-form" onsubmit="return addStaff(event)">
                             <div class="form-grid">
@@ -393,6 +492,16 @@
                                     <label class="form-label">Email Address</label>
                                     <input type="email" id="emp-email" class="form-input"
                                         placeholder="e.g. rahul@company.com" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Password</label>
+                                    <div class="password-wrap"><input type="password" id="emp-password" class="form-input"
+                                        placeholder="e.g. 1234" required><button type="button" class="eye-btn" onclick="togglePwd('emp-password', this)">👁️</button></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Monthly Salary (₹)</label>
+                                    <input type="number" id="emp-salary" class="form-input"
+                                        placeholder="e.g. 25000">
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Shift</label>
@@ -442,7 +551,10 @@
 
                 <!-- ======== TAB: REPORTS ======== -->
                 <div id="tab-reports" class="tab-panel">
-                    <h2 class="page-title">📋 Attendance Reports</h2>
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('attendance')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Smart Attend</button>
+                        <h2 class="page-title" style="margin:0;">📋 Attendance Reports</h2>
+                    </div>
                     <!-- Filters -->
                     <div class="filter-bar glass">
                         <div class="filter-group">
@@ -492,7 +604,8 @@
                         <button class="btn btn-danger btn-sm" onclick="exportPDF()">📄 Export PDF</button>
                         <div class="payroll-export">
                             <input type="month" id="payroll-month" class="form-input">
-                            <button class="btn btn-accent btn-sm" onclick="exportPayroll()">💰 Payroll CSV</button>
+                            <button class="btn btn-outline-dark btn-sm" onclick="exportPayroll()">📥 Payroll CSV</button>
+                            <button class="btn btn-accent btn-sm" onclick="openSalaryModal()">💰 Generate Salary Slip</button>
                         </div>
                     </div>
                     <div class="table-wrapper">
@@ -506,7 +619,8 @@
                                     <th>Code</th>
                                     <th>Name</th>
                                     <th>Dept</th>
-                                    <th>Coordinates</th>
+                                    <th>Photo</th>
+                                    <th>Location & Map</th>
                                 </tr>
                             </thead>
                             <tbody id="logs-tbody"></tbody>
@@ -517,7 +631,10 @@
 
                 <!-- ======== TAB: LEAVE REQUESTS ======== -->
                 <div id="tab-leaves" class="tab-panel">
-                    <h2 class="page-title">📝 Leave Requests</h2>
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('attendance')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Smart Attend</button>
+                        <h2 class="page-title" style="margin:0;">📝 Leave Requests</h2>
+                    </div>
                     <div class="filter-bar glass" style="margin-bottom: 20px;">
                         <div class="filter-group">
                             <label>Status</label>
@@ -569,8 +686,20 @@
                         <button class="btn btn-outline-dark btn-sm" onclick="addShiftRow()"
                             style="margin-top:12px;">+ Add Shift</button>
                     </div>
-                    <button class="btn btn-primary" onclick="saveSettings()" style="margin-top: 16px;">💾 Save All
-                        Settings</button>
+
+                    <!-- Holiday Calendar Management -->
+                    <div class="form-card glass" style="margin-top: 20px;">
+                        <h3>📅 Yearly Holiday Calendar</h3>
+                        <p style="font-size:12px;color:#666;margin-top:0;">These days will be fully paid when generating salary.</p>
+                        <div style="display:flex; gap:10px; margin-bottom: 12px;">
+                            <input type="date" id="holiday-date" class="form-input" style="flex:1;">
+                            <input type="text" id="holiday-name" class="form-input" placeholder="e.g. Diwali" style="flex:2;">
+                            <button class="btn btn-primary" onclick="addHoliday()">+ Add</button>
+                        </div>
+                        <div id="holidays-list" style="display:grid; gap:8px;"></div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveSettings()" style="margin-top: 20px;">💾 Save Core Settings</button>
                 </div>
 
                 <!-- ======== TAB: MANAGE ADMINS ======== -->
@@ -590,7 +719,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Password</label>
-                                    <input type="password" id="new-admin-pass" class="form-input" required>
+                                    <div class="password-wrap"><input type="password" id="new-admin-pass" class="form-input" required><button type="button" class="eye-btn" onclick="togglePwd('new-admin-pass', this)">👁️</button></div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Role</label>
@@ -610,6 +739,48 @@
             </main>
         </div>
     </section>
+
+    <!-- ============ MODAL: SALARY / PAYROLL VIEW ============ -->
+    <div id="modal-salary" class="modal-overlay" style="display:none;">
+        <div class="modal-content glass" style="max-width: 900px; padding: 24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+                <h2 style="margin:0;">💰 Smart Payroll Generator</h2>
+                <button class="btn-ghost" onclick="document.getElementById('modal-salary').style.display='none'">✖</button>
+            </div>
+            <div style="display:flex; gap:12px; margin-bottom: 20px; align-items:flex-end;">
+                <div>
+                    <label class="form-label">Select Month</label>
+                    <input type="month" id="payroll-month-picker" class="form-input">
+                </div>
+                <button class="btn btn-primary" onclick="generateSalaryReport()">Calculate Salary</button>
+            </div>
+
+            <div id="payroll-stats" style="display:none; gap:16px; margin-bottom: 16px; font-size:14px;">
+                <div style="background:#f4f7f9; padding:8px 16px; border-radius:6px; color:#333;">Total Days: <strong id="py-total">30</strong></div>
+                <div style="background:#f4f7f9; padding:8px 16px; border-radius:6px; color:#333;">Sundays: <strong id="py-sun">4</strong></div>
+                <div style="background:#f4f7f9; padding:8px 16px; border-radius:6px; color:#333;">Office Holidays: <strong id="py-hol">1</strong></div>
+            </div>
+
+            <div class="table-wrapper" style="max-height: 400px; overflow-y:auto;">
+                <table class="att-table" id="payroll-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Employee</th>
+                            <th>Base Sal. (₹)</th>
+                            <th>Work Days</th>
+                            <th>Late/Abs.</th>
+                            <th>Leaves</th>
+                            <th>Payable Days</th>
+                            <th>🎯 Final Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody id="payroll-tbody"></tbody>
+                </table>
+            </div>
+            <p id="payroll-loading" style="text-align:center; display:none;">Calculating strictly by 8-hour metrics...</p>
+        </div>
+    </div>
 
     <script src="app.js"></script>
     <script>

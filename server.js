@@ -49,6 +49,8 @@ const staffSchema = new mongoose.Schema({
     name: { type: String, required: true },
     dept: { type: String, required: true },
     email: { type: String, required: true, lowercase: true },
+    password: { type: String, default: '1234' },
+    baseSalary: { type: Number, default: 0 },
     shift: { type: String, default: 'General' },
     active: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now }
@@ -103,6 +105,10 @@ const settingsSchema = new mongoose.Schema({
         startTime: { type: String },
         endTime: { type: String },
         graceMinutes: { type: Number, default: 15 }
+    }],
+    holidays: [{
+        date: { type: String }, // format YYYY-MM-DD
+        name: { type: String }
     }]
 });
 const Settings = mongoose.model('Settings', settingsSchema);
@@ -204,68 +210,20 @@ app.post('/api/auth/admin-login', async (req, res) => {
     res.json({ success: true, token, admin: { name: admin.name, email: admin.email, role: admin.role } });
 });
 
-// Employee Login — Send OTP
+// Employee Login — Password based
 app.post('/api/auth/employee-login', async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const staff = await Staff.findOne({ email: email.toLowerCase(), active: true });
     if (!staff) return res.status(404).json({ error: 'Employee not found. Contact admin.' });
 
-    const otp = String(Math.floor(1000 + Math.random() * 9000));
-    otpStore.set(email.toLowerCase(), {
-        otp,
-        expires: Date.now() + 5 * 60 * 1000, // 5 min expiry
-        staffId: staff._id
-    });
-
-    try {
-        await transporter.sendMail({
-            from: `"${SENDER_NAME}" <${SMTP_USER}>`,
-            to: staff.email,
-            subject: `BookMyCA Smart Attend OTP — ${staff.name}`,
-            html: `
-                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; border: 1px solid #e0e6ed; border-radius: 12px; overflow: hidden;">
-                    <div style="background: linear-gradient(135deg, #0B3C5D, #072a42); padding: 28px 24px; text-align: center;">
-                        <h1 style="color: #C8A951; margin: 0; font-size: 22px;">📋 BookMyCA Smart Attend</h1>
-                        <p style="color: rgba(255,255,255,0.6); margin: 6px 0 0; font-size: 13px;">Employee Verification Code</p>
-                    </div>
-                    <div style="padding: 32px 24px; text-align: center; background: #fff;">
-                        <p style="color: #333; font-size: 15px; margin: 0 0 8px;">Hello <strong>${staff.name}</strong>,</p>
-                        <p style="color: #666; font-size: 14px; margin: 0 0 24px;">Use the code below to verify your attendance:</p>
-                        <div style="background: #F4F7F9; border: 2px dashed #C8A951; border-radius: 10px; padding: 20px; display: inline-block;">
-                            <span style="font-size: 36px; font-weight: 800; letter-spacing: 12px; color: #0B3C5D;">${otp}</span>
-                        </div>
-                        <p style="color: #999; font-size: 12px; margin: 24px 0 0;">This code expires in 5 minutes.</p>
-                    </div>
-                    <div style="background: #F4F7F9; padding: 14px; text-align: center; border-top: 1px solid #e8ecf1;">
-                        <p style="color: #aaa; font-size: 11px; margin: 0;">Automated email from BookMyCA Smart Attend Suite.</p>
-                    </div>
-                </div>`
-        });
-        console.log(`📧 OTP ${otp} sent to ${staff.email} (${staff.name})`);
-        res.json({ success: true, message: `OTP sent to ${staff.email}`, employeeName: staff.name });
-    } catch (err) {
-        console.error('❌ Email failed:', err.message);
-        res.status(500).json({ error: 'Failed to send OTP email' });
+    // Fallback to '1234' if the database document was created before the password field existed
+    const validPassword = staff.password || '1234';
+    if (password !== validPassword) {
+        return res.status(401).json({ error: 'Invalid password' });
     }
-});
 
-// Employee Verify OTP
-app.post('/api/auth/verify-otp', async (req, res) => {
-    const { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
-
-    const record = otpStore.get(email.toLowerCase());
-    if (!record) return res.status(400).json({ error: 'OTP not found. Request a new one.' });
-    if (Date.now() > record.expires) {
-        otpStore.delete(email.toLowerCase());
-        return res.status(400).json({ error: 'OTP expired. Request a new one.' });
-    }
-    if (record.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
-
-    otpStore.delete(email.toLowerCase());
-    const staff = await Staff.findById(record.staffId);
     const token = jwt.sign(
         { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, shift: staff.shift, type: 'employee' },
         JWT_SECRET, { expiresIn: '12h' }
@@ -281,11 +239,19 @@ app.get('/api/staff', adminAuth, async (req, res) => {
 });
 
 app.post('/api/staff', adminAuth, async (req, res) => {
-    const { code, name, dept, email, shift } = req.body;
+    const { code, name, dept, email, shift, password, baseSalary } = req.body;
     if (!code || !name || !dept || !email) return res.status(400).json({ error: 'All fields required' });
     const exists = await Staff.findOne({ code: code.toUpperCase() });
     if (exists) return res.status(409).json({ error: 'Employee code already exists' });
-    const staff = await Staff.create({ code: code.toUpperCase(), name, dept, email: email.toLowerCase(), shift: shift || 'General' });
+    const staff = await Staff.create({ 
+        code: code.toUpperCase(), 
+        name, 
+        dept, 
+        email: email.toLowerCase(), 
+        shift: shift || 'General',
+        password: password || '1234',
+        baseSalary: Number(baseSalary) || 0
+    });
     res.json({ success: true, staff });
 });
 
@@ -304,8 +270,14 @@ app.post('/api/staff/bulk', adminAuth, async (req, res) => {
 });
 
 app.put('/api/staff/:id', adminAuth, async (req, res) => {
-    const { name, dept, email, shift } = req.body;
-    const staff = await Staff.findByIdAndUpdate(req.params.id, { name, dept, email: email?.toLowerCase(), shift }, { new: true });
+    const { name, dept, email, shift, baseSalary } = req.body;
+    const staff = await Staff.findByIdAndUpdate(req.params.id, { 
+        name, 
+        dept, 
+        email: email?.toLowerCase(), 
+        shift,
+        baseSalary: Number(baseSalary) || 0
+    }, { new: true });
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
     res.json({ success: true, staff });
 });
@@ -334,8 +306,9 @@ app.post('/api/attendance/checkin', anyAuth, async (req, res) => {
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const todayStr = now.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-IN', { ...IST, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
     // Check if already checked in today
     const existing = await AttendanceLog.findOne({ staffId: staff._id, date: todayStr, type: 'IN' });
@@ -350,10 +323,13 @@ app.post('/api/attendance/checkin', anyAuth, async (req, res) => {
         const startTime = empShift ? empShift.startTime : settings.officeStartTime;
         const grace = empShift ? empShift.graceMinutes : settings.graceMinutes;
 
+        // Get current IST time for late detection
         const [h, m] = startTime.split(':').map(Number);
-        const cutoff = new Date();
+        // Build cutoff as milliseconds in IST
+        const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const cutoff = new Date(nowIST);
         cutoff.setHours(h, m + grace, 0, 0);
-        if (now > cutoff) status = 'LATE';
+        if (nowIST > cutoff) status = 'LATE';
     }
 
     const log = await AttendanceLog.create({
@@ -386,8 +362,9 @@ app.post('/api/attendance/checkout', anyAuth, async (req, res) => {
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
 
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const todayStr = now.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-IN', { ...IST, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
     // Check if checked in today
     const checkin = await AttendanceLog.findOne({ staffId: staff._id, date: todayStr, type: 'IN' });
@@ -438,8 +415,7 @@ app.get('/api/attendance/logs', adminAuth, async (req, res) => {
     const logs = await AttendanceLog.find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(parseInt(limit))
-        .select('-snapshot'); // Exclude snapshot for list performance
+        .limit(parseInt(limit));
 
     res.json({ logs, total, page: parseInt(page), pages: Math.ceil(total / limit) });
 });
@@ -455,15 +431,15 @@ app.get('/api/attendance/logs/:id', adminAuth, async (req, res) => {
 app.get('/api/attendance/my-logs', anyAuth, async (req, res) => {
     const logs = await AttendanceLog.find({ staffId: req.user.id })
         .sort({ createdAt: -1 })
-        .limit(50)
-        .select('-snapshot');
+        .limit(50);
     res.json(logs);
 });
 
 // Dashboard Stats
 app.get('/api/attendance/dashboard', adminAuth, async (req, res) => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const todayStr = now.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
 
     const totalStaff = await Staff.countDocuments({ active: true });
     const todayLogs = await AttendanceLog.find({ date: todayStr });
@@ -482,11 +458,12 @@ app.get('/api/attendance/dashboard', adminAuth, async (req, res) => {
     for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const dStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const IST = { timeZone: 'Asia/Kolkata' };
+        const dStr = d.toLocaleDateString('en-IN', { ...IST, day: '2-digit', month: '2-digit', year: 'numeric' });
         const dayLogs = await AttendanceLog.find({ date: dStr, type: 'IN' });
         weeklyData.push({
             date: dStr,
-            label: d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' }),
+            label: d.toLocaleDateString('en-IN', { ...IST, weekday: 'short', day: '2-digit', month: 'short' }),
             present: dayLogs.length,
             late: dayLogs.filter(l => l.status === 'LATE').length,
             onTime: dayLogs.filter(l => l.status === 'ON TIME').length
@@ -501,7 +478,8 @@ app.get('/api/attendance/dashboard', adminAuth, async (req, res) => {
 
     // Top 5 late employees this month
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthStartStr = monthStart.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const IST2 = { timeZone: 'Asia/Kolkata' };
+    const monthStartStr = monthStart.toLocaleDateString('en-IN', { ...IST2, day: '2-digit', month: '2-digit', year: 'numeric' });
     const topLate = await AttendanceLog.aggregate([
         { $match: { status: 'LATE', type: 'IN' } },
         { $group: { _id: { code: '$code', name: '$name' }, count: { $sum: 1 } } },
@@ -759,6 +737,853 @@ app.post('/api/send-otp', async (req, res) => {
         res.json({ success: true, message: `OTP sent to ${employeeEmail}` });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to send email.' });
+    }
+});
+
+// ============ SETTINGS (HOLIDAYS) ============
+app.post('/api/settings/holidays', adminAuth, async (req, res) => {
+    const { date, name } = req.body;
+    if (!date || !name) return res.status(400).json({ error: 'Date and Name required' });
+    let settings = await Settings.findOne({ key: 'global' });
+    if (!settings) settings = await Settings.create({ key: 'global' });
+    
+    if (!settings.holidays) settings.holidays = [];
+    if (!settings.holidays.find(h => h.date === date)) {
+        settings.holidays.push({ date, name });
+        await settings.save();
+    }
+    res.json({ success: true, holidays: settings.holidays });
+});
+
+app.delete('/api/settings/holidays/:date', adminAuth, async (req, res) => {
+    let settings = await Settings.findOne({ key: 'global' });
+    if (settings && settings.holidays) {
+        settings.holidays = settings.holidays.filter(h => h.date !== req.params.date);
+        await settings.save();
+    }
+    res.json({ success: true, holidays: settings ? settings.holidays : [] });
+});
+
+// ============ PAYROLL CALCULATION ENGINE ============
+app.get('/api/payroll/calculate/:month', adminAuth, async (req, res) => {
+    try {
+        const { month } = req.params; // format: YYYY-MM
+        const [year, m] = month.split('-').map(Number);
+        if (!year || !m) return res.status(400).json({ error: 'Invalid month (YYYY-MM)' });
+
+        const staffList = await Staff.find({ active: true });
+        const totalDays = new Date(year, m, 0).getDate();
+        
+        // Count Sundays
+        let sundays = 0;
+        for (let day = 1; day <= totalDays; day++) {
+            if (new Date(year, m - 1, day).getDay() === 0) sundays++;
+        }
+
+        // Count Holidays (Matching YYYY-MM)
+        const settings = await Settings.findOne({ key: 'global' });
+        let holidaysCount = 0;
+        if (settings && settings.holidays) {
+            settings.holidays.forEach(h => {
+                if (h.date.startsWith(month)) holidaysCount++;
+            });
+        }
+        
+        const allowedLeaves = 1; // Standard config
+        const regexDate = new RegExp(`^[0-3][0-9]/${m.toString().padStart(2, '0')}/${year}$`);
+        
+        const payrollData = [];
+
+        // Parallel log queries using regex for the whole month
+        const [logsIn, logsOut, approvedLeaves] = await Promise.all([
+            AttendanceLog.find({ type: 'IN', date: regexDate }),
+            AttendanceLog.find({ type: 'OUT', date: regexDate }),
+            LeaveRequest.find({ status: 'approved', date: regexDate }) // format depends on how user sets leave date... Wait, leave date in DB is string? Yes.
+        ]);
+
+        for (const staff of staffList) {
+            const baseSalary = staff.baseSalary || 0;
+            const staffLogsIn = logsIn.filter(l => l.staffId.toString() === staff._id.toString());
+            const staffLogsOut = logsOut.filter(l => l.staffId.toString() === staff._id.toString());
+            
+            let actualDaysWorked = 0;
+            let lateDaysCount = 0;
+
+            staffLogsIn.forEach(inLog => {
+                const outLog = staffLogsOut.find(o => o.date === inLog.date);
+                if (inLog.status === 'LATE') lateDaysCount++;
+                
+                if (outLog && outLog.status) {
+                    const match = outLog.status.match(/(\d+)h/);
+                    if (match) {
+                        const h = parseInt(match[1]);
+                        if (h >= 8) actualDaysWorked += 1;
+                        else if (h >= 4) actualDaysWorked += 0.5;
+                        else actualDaysWorked += 0;
+                    }
+                } else {
+                    // Missed checkout default fallback
+                    actualDaysWorked += 0.5;
+                }
+            });
+
+            // Find leaves
+            const leavesTaken = approvedLeaves.filter(l => l.staffId.toString() === staff._id.toString()).length;
+
+            // Simple Gross Calculation: (Base / TotalMonthDays) * PaidDays
+            let paidDays = actualDaysWorked + sundays + holidaysCount + allowedLeaves;
+            if (paidDays > totalDays) paidDays = totalDays; // Cap
+
+            const salaryAmount = Math.round((baseSalary / totalDays) * paidDays);
+
+            payrollData.push({
+                staffId: staff._id,
+                code: staff.code,
+                name: staff.name,
+                dept: staff.dept,
+                baseSalary,
+                totalDays,
+                actualDaysWorked,
+                lateDaysCount,
+                leavesTaken,
+                paidDays,
+                sundays,
+                holidaysCount,
+                calculatedSalary: salaryAmount
+            });
+        }
+
+        res.json({ success: true, month, year, totalDays, sundays, holidaysCount, records: payrollData });
+    } catch (err) {
+        console.error('Payroll Engine Error:', err);
+        res.status(500).json({ error: 'Failed to calculate payroll' });
+    }
+});
+
+// ============ CLIENT MASTER MODULE ============
+
+// --- Client Schema ---
+const clientSchema = new mongoose.Schema({
+    clientCode:      { type: String, unique: true },       // AUTO: CLT-0001
+    clientName:      { type: String, required: true },      // Legal entity name
+    tradeName:       { type: String, default: '' },         // Trade/brand name
+    gstin:           { type: String, default: '' },
+    pan:             { type: String, default: '' },
+    stateCode:       { type: String, default: '08' },       // For GST routing (08=Rajasthan)
+    stateName:       { type: String, default: 'Rajasthan' },
+    address:         { type: String, default: '' },
+    city:            { type: String, default: '' },
+    pincode:         { type: String, default: '' },
+    contactPerson:   { type: String, default: '' },
+    phone:           { type: String, default: '' },
+    email:           { type: String, default: '' },
+    serviceCategories: [{ type: String }],                  // GST, ITR, Audit etc.
+    paymentTerms:    { type: String, default: 'Net 30' },   // Net 15, 30, 45, custom
+    notes:           { type: String, default: '' },
+    isActive:        { type: Boolean, default: true },
+    createdAt:       { type: Date, default: Date.now },
+    updatedAt:       { type: Date, default: Date.now }
+});
+const Client = mongoose.model('Client', clientSchema);
+
+// --- Counter Schema (for auto-generated sequential IDs) ---
+const counterSchema = new mongoose.Schema({
+    _id:    { type: String, required: true },   // e.g. 'invoiceNo', 'clientCode'
+    seq:    { type: Number, default: 0 }
+});
+const Counter = mongoose.model('Counter', counterSchema);
+
+// Helper: get next sequential number atomically
+async function getNextSequence(name) {
+    const doc = await Counter.findByIdAndUpdate(
+        name,
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+    );
+    return doc.seq;
+}
+
+// ── CLIENT ROUTES ──────────────────────────────────────────────
+
+// List all clients (for dropdowns + management)
+app.get('/api/clients', anyAuth, async (req, res) => {
+    try {
+        const { search, active } = req.query;
+        const filter = {};
+        if (active !== 'false') filter.isActive = true;
+        if (search) {
+            filter.$or = [
+                { clientName: { $regex: search, $options: 'i' } },
+                { tradeName:  { $regex: search, $options: 'i' } },
+                { gstin:      { $regex: search, $options: 'i' } },
+                { phone:      { $regex: search, $options: 'i' } },
+                { email:      { $regex: search, $options: 'i' } },
+                { clientCode: { $regex: search, $options: 'i' } }
+            ];
+        }
+        const clients = await Client.find(filter).sort({ clientName: 1 });
+        res.json({ success: true, clients });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get single client with related tasks + invoices
+app.get('/api/clients/:id', anyAuth, async (req, res) => {
+    try {
+        const client = await Client.findById(req.params.id);
+        if (!client) return res.status(404).json({ error: 'Client not found' });
+        // Also fetch related tasks
+        const tasks = await Task.find({ clientId: req.params.id }).sort({ createdAt: -1 });
+        res.json({ success: true, client, tasks });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create client
+app.post('/api/clients', anyAuth, async (req, res) => {
+    try {
+        const { clientName, tradeName, gstin, pan, stateCode, stateName,
+                address, city, pincode, contactPerson, phone, email,
+                serviceCategories, paymentTerms, notes } = req.body;
+        if (!clientName) return res.status(400).json({ error: 'Client name is required' });
+
+        const seq = await getNextSequence('clientCode');
+        const clientCode = 'CLT-' + String(seq).padStart(4, '0');
+
+        const client = await Client.create({
+            clientCode, clientName, tradeName: tradeName || '',
+            gstin: gstin || '', pan: pan || '',
+            stateCode: stateCode || '08', stateName: stateName || 'Rajasthan',
+            address: address || '', city: city || '', pincode: pincode || '',
+            contactPerson: contactPerson || '', phone: phone || '', email: email || '',
+            serviceCategories: serviceCategories || [],
+            paymentTerms: paymentTerms || 'Net 30',
+            notes: notes || ''
+        });
+        res.json({ success: true, client, message: `Client ${clientCode} created!` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update client
+app.put('/api/clients/:id', anyAuth, async (req, res) => {
+    try {
+        const updates = { ...req.body, updatedAt: Date.now() };
+        delete updates._id;
+        delete updates.clientCode; // Never overwrite clientCode
+        const client = await Client.findByIdAndUpdate(req.params.id, updates, { new: true });
+        if (!client) return res.status(404).json({ error: 'Client not found' });
+        res.json({ success: true, client, message: 'Client updated!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Deactivate client (soft delete)
+app.delete('/api/clients/:id', adminAuth, async (req, res) => {
+    try {
+        await Client.findByIdAndUpdate(req.params.id, { isActive: false });
+        res.json({ success: true, message: 'Client deactivated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Indian States list for dropdown
+app.get('/api/meta/states', (req, res) => {
+    res.json([
+        { code:'01', name:'Jammu & Kashmir' }, { code:'02', name:'Himachal Pradesh' },
+        { code:'03', name:'Punjab' }, { code:'04', name:'Chandigarh' },
+        { code:'05', name:'Uttarakhand' }, { code:'06', name:'Haryana' },
+        { code:'07', name:'Delhi' }, { code:'08', name:'Rajasthan' },
+        { code:'09', name:'Uttar Pradesh' }, { code:'10', name:'Bihar' },
+        { code:'11', name:'Sikkim' }, { code:'12', name:'Arunachal Pradesh' },
+        { code:'13', name:'Nagaland' }, { code:'14', name:'Manipur' },
+        { code:'15', name:'Mizoram' }, { code:'16', name:'Tripura' },
+        { code:'17', name:'Meghalaya' }, { code:'18', name:'Assam' },
+        { code:'19', name:'West Bengal' }, { code:'20', name:'Jharkhand' },
+        { code:'21', name:'Odisha' }, { code:'22', name:'Chhattisgarh' },
+        { code:'23', name:'Madhya Pradesh' }, { code:'24', name:'Gujarat' },
+        { code:'25', name:'Daman & Diu' }, { code:'26', name:'Dadra & Nagar Haveli' },
+        { code:'27', name:'Maharashtra' }, { code:'28', name:'Andhra Pradesh' },
+        { code:'29', name:'Karnataka' }, { code:'30', name:'Goa' },
+        { code:'31', name:'Lakshadweep' }, { code:'32', name:'Kerala' },
+        { code:'33', name:'Tamil Nadu' }, { code:'34', name:'Puducherry' },
+        { code:'35', name:'Andaman & Nicobar' }, { code:'36', name:'Telangana' },
+        { code:'37', name:'Andhra Pradesh (New)' }, { code:'38', name:'Ladakh' }
+    ]);
+});
+
+// ============ TASK MANAGEMENT MODULE ============
+
+// --- Task Schema ---
+const taskSchema = new mongoose.Schema({
+    taskId:         { type: String, required: true, unique: true },
+    staffId:        { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
+    staffCode:      { type: String, required: true },
+    staffName:      { type: String, required: true },
+    clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+    clientName:     { type: String, required: true },
+    serviceType:    { type: String, enum: ['GST','ITR','Audit','Subsidy','Accounting','Trademark','Other'], default: 'Other' },
+    subService:     { type: String, default: '' },
+    workStatus:     { type: String, enum: ['Not Started','In Progress','Completed'], default: 'Not Started' },
+    estimatedFees:  { type: Number, default: 0 },
+    finalFees:      { type: Number, default: 0 },
+    invoiceStatus:  { type: String, enum: ['Not Raised','Raised'], default: 'Not Raised' },
+    paymentStatus:  { type: String, enum: ['Pending','Partial','Received'], default: 'Pending' },
+    amountReceived: { type: Number, default: 0 },
+    notes:          { type: String, default: '' },
+    createdAt:      { type: Date, default: Date.now },
+    updatedAt:      { type: Date, default: Date.now }
+});
+const Task = mongoose.model('Task', taskSchema);
+
+// Helper: compute KPIs from a list of task docs
+function computeTaskKPIs(tasks) {
+    let totalAssigned = tasks.length;
+    let completed = 0, revenueBilled = 0, collectionPending = 0;
+    tasks.forEach(t => {
+        if (t.workStatus === 'Completed') completed++;
+        // RULE: Revenue only counted if Payment Status = "Received"
+        if (t.paymentStatus === 'Received') revenueBilled += (t.finalFees || 0);
+        // RULE: Pending = finalFees - amountReceived
+        const pending = (t.finalFees || 0) - (t.amountReceived || 0);
+        if (pending > 0) collectionPending += pending;
+    });
+    return { totalAssigned, completed, revenueBilled, collectionPending };
+}
+
+// Generate unique task ID
+async function generateTaskId() {
+    const count = await Task.countDocuments();
+    return 'TSK-' + String(count + 1001).padStart(4, '0');
+}
+
+// ── Employee: Get own tasks + KPIs ──────────────────────────────
+app.get('/api/tasks/my', anyAuth, async (req, res) => {
+    try {
+        // Check if user is admin — if so, show all tasks (or tasks assigned to admin's _id)
+        let filter = { staffId: req.user.id };
+        try {
+            const payload = JSON.parse(atob(req.headers.authorization.split('.')[1].split('.')[0]));
+            if (payload.type === 'admin' || payload.role === 'superadmin') {
+                filter = {}; // Admin sees all tasks from task portal
+            }
+        } catch(_) {}
+        const tasks = await Task.find(filter).sort({ createdAt: -1 });
+        const kpis = computeTaskKPIs(tasks);
+        res.json({ success: true, tasks, kpis, user: { id: req.user.id, name: req.user.name, code: req.user.code, email: req.user.email } });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch tasks: ' + err.message });
+    }
+});
+
+// ── Employee: Create a new task ──────────────────────────────────
+app.post('/api/tasks', anyAuth, async (req, res) => {
+    try {
+        const { clientId, clientName, serviceType, subService, workStatus, estimatedFees, finalFees, invoiceStatus, paymentStatus, amountReceived, notes, staffId: bodyStaffId } = req.body;
+        if (!clientName) return res.status(400).json({ error: 'Client name is required' });
+
+        // Try finding staff - for employee it's req.user.id, for admin it could be passed in body
+        let staff = await Staff.findById(req.user.id);
+        if (!staff && bodyStaffId) {
+            staff = await Staff.findById(bodyStaffId);
+        }
+        // If admin and no staffId specified, allow self-assignment with admin info
+        if (!staff) {
+            // Check if user is admin
+            try {
+                const payload = JSON.parse(atob(req.headers.authorization.split('.')[1].split('.')[0]));
+                if (payload.type === 'admin' || payload.role === 'superadmin') {
+                    const admin = await Admin.findById(req.user.id);
+                    if (admin) {
+                        staff = { _id: admin._id, code: 'ADMIN', name: admin.name };
+                    }
+                }
+            } catch(_) {}
+        }
+        if (!staff) return res.status(404).json({ error: 'Employee not found' });
+
+        const taskId = await generateTaskId();
+        const task = await Task.create({
+            taskId,
+            staffId: staff._id,
+            staffCode: staff.code,
+            staffName: staff.name,
+            clientId: clientId || undefined,
+            clientName,
+            serviceType: serviceType || 'Other',
+            subService: subService || '',
+            workStatus: workStatus || 'Not Started',
+            estimatedFees: Number(estimatedFees) || 0,
+            finalFees: Number(finalFees) || 0,
+            invoiceStatus: invoiceStatus || 'Not Raised',
+            paymentStatus: paymentStatus || 'Pending',
+            amountReceived: Number(amountReceived) || 0,
+            notes: notes || ''
+        });
+        res.json({ success: true, task, message: 'Task created! ID: ' + taskId });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create task: ' + err.message });
+    }
+});
+
+// ── Employee: Update own task ────────────────────────────────────
+app.put('/api/tasks/:id', anyAuth, async (req, res) => {
+    try {
+        const filter = { _id: req.params.id };
+        // Employees can only edit their own tasks; admins can edit any
+        if (req.user.type !== 'admin' && req.user.role !== 'superadmin') {
+            filter.staffId = req.user.id;
+        }
+        const { clientName, serviceType, subService, workStatus, estimatedFees, finalFees, invoiceStatus, paymentStatus, amountReceived, notes } = req.body;
+        const task = await Task.findOneAndUpdate(filter, {
+            clientName, serviceType, subService, workStatus,
+            estimatedFees: Number(estimatedFees) || 0,
+            finalFees: Number(finalFees) || 0,
+            invoiceStatus, paymentStatus,
+            amountReceived: Number(amountReceived) || 0,
+            notes: notes || '',
+            updatedAt: Date.now()
+        }, { new: true });
+        if (!task) return res.status(404).json({ error: 'Task not found or access denied' });
+        res.json({ success: true, task, message: 'Task updated successfully!' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update task: ' + err.message });
+    }
+});
+
+// ── Admin: Get ALL tasks across all employees + firm-wide KPIs ───
+app.get('/api/tasks/all', adminAuth, async (req, res) => {
+    try {
+        const { staffId, serviceType, workStatus, paymentStatus } = req.query;
+        const filter = {};
+        if (staffId)      filter.staffId      = staffId;
+        if (serviceType)  filter.serviceType  = serviceType;
+        if (workStatus)   filter.workStatus   = workStatus;
+        if (paymentStatus) filter.paymentStatus = paymentStatus;
+
+        const tasks = await Task.find(filter).sort({ createdAt: -1 });
+        const kpis  = computeTaskKPIs(tasks);
+
+        // Per-employee summary breakdown for admin
+        const empMap = {};
+        tasks.forEach(t => {
+            const key = t.staffCode;
+            if (!empMap[key]) empMap[key] = { staffCode: t.staffCode, staffName: t.staffName, staffId: t.staffId, tasks: [] };
+            empMap[key].tasks.push(t);
+        });
+        const employeeSummary = Object.values(empMap).map(e => ({
+            staffCode: e.staffCode,
+            staffName: e.staffName,
+            staffId:   e.staffId,
+            kpis: computeTaskKPIs(e.tasks)
+        }));
+
+        res.json({ success: true, tasks, kpis, employeeSummary });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch all tasks: ' + err.message });
+    }
+});
+
+// ── Admin: Get staff list for filter dropdown ────────────────────
+app.get('/api/tasks/staff-list', adminAuth, async (req, res) => {
+    try {
+        const staff = await Staff.find({ active: true }).select('_id code name dept').sort({ name: 1 });
+        res.json(staff);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Admin: Delete a task ─────────────────────────────────────────
+app.delete('/api/tasks/:id', adminAuth, async (req, res) => {
+    try {
+        await Task.findByIdAndDelete(req.params.id);
+        res.json({ success: true, message: 'Task deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Admin: Create task for ANY employee (assigns by staffId) ─────
+app.post('/api/tasks/admin-create', adminAuth, async (req, res) => {
+    try {
+        const { staffId, clientId, clientName, serviceType, subService, workStatus, estimatedFees, finalFees,
+                invoiceStatus, paymentStatus, amountReceived, notes, staffName, staffCode } = req.body;
+        if (!clientName) return res.status(400).json({ error: 'Client name is required' });
+        if (!staffId)    return res.status(400).json({ error: 'Employee (staffId) is required' });
+
+        // Fetch staff info from DB for accurate name/code
+        const staff = await Staff.findById(staffId);
+        if (!staff) return res.status(404).json({ error: 'Employee not found' });
+
+        const taskId = await generateTaskId();
+        const task = await Task.create({
+            taskId,
+            staffId: staff._id,
+            staffCode: staff.code,
+            staffName: staff.name,
+            clientId,
+            clientName,
+            serviceType: serviceType || 'Other',
+            subService: subService || '',
+            workStatus: workStatus || 'Not Started',
+            estimatedFees: Number(estimatedFees) || 0,
+            finalFees: Number(finalFees) || 0,
+            invoiceStatus: invoiceStatus || 'Not Raised',
+            paymentStatus: paymentStatus || 'Pending',
+            amountReceived: Number(amountReceived) || 0,
+            notes: notes || ''
+        });
+        res.json({ success: true, task, message: `Task ${taskId} assigned to ${staff.name}!` });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create task: ' + err.message });
+    }
+});
+
+// ============ INVOICE ENGINE ============
+
+// --- Invoice Schema ---
+const invoiceSchema = new mongoose.Schema({
+    invoiceNo:      { type: String, required: true, unique: true },
+    taskId:         { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
+    clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+    invoiceType:    { type: String, enum: ['GST','NON_GST'], default: 'GST' },
+    gstType:        { type: String, enum: ['CGST_SGST','IGST','NONE'], default: 'CGST_SGST' },
+    lineItems: [{
+        description:  { type: String, default: '' },
+        sacCode:      { type: String, default: '998312' },
+        qty:          { type: Number, default: 1 },
+        rate:         { type: Number, default: 0 },
+        amount:       { type: Number, default: 0 }
+    }],
+    taxableAmount:   { type: Number, default: 0 },
+    cgstRate:        { type: Number, default: 9 },
+    cgstAmt:         { type: Number, default: 0 },
+    sgstRate:        { type: Number, default: 9 },
+    sgstAmt:         { type: Number, default: 0 },
+    igstRate:        { type: Number, default: 18 },
+    igstAmt:         { type: Number, default: 0 },
+    totalAmount:     { type: Number, default: 0 },
+    amountInWords:   { type: String, default: '' },
+    firmName:        { type: String, default: 'AVPM & ASSOCIATES' },
+    firmGstin:       { type: String, default: '08ABKFA4108L1ZC' },
+    firmAddress:     { type: String, default: '11-K-3 SAHKAR MARG, INFRONT OF JAIPUR MAHANAGAR TIMES, NEAR JYOTI NAGAR THANA, LAL KOTHI, JAIPUR, RAJASTHAN 302015' },
+    firmState:       { type: String, default: 'Rajasthan, Code: 08' },
+    firmEmail:       { type: String, default: 'CAPIYUSHMITTAL80@GMAIL.COM' },
+    firmBankName:    { type: String, default: 'State Bank of India' },
+    firmAccountNo:   { type: String, default: '39601161082' },
+    firmIfsc:        { type: String, default: 'SBIN0015515' },
+    firmBranch:      { type: String, default: 'Kailashpuri Tonk Road' },
+    clientName:      { type: String, default: '' },
+    clientGstin:     { type: String, default: '' },
+    clientAddress:   { type: String, default: '' },
+    clientState:     { type: String, default: '' },
+    clientStateCode: { type: String, default: '' },
+    clientEmail:     { type: String, default: '' },
+    invoiceDate:     { type: Date, default: Date.now },
+    dueDate:         { type: Date },
+    paymentTerms:    { type: String, default: 'Net 30' },
+    notes:           { type: String, default: '' },
+    status:          { type: String, enum: ['Draft','Sent','PartiallyPaid','Paid','Cancelled'], default: 'Draft' },
+    emailSentAt:     { type: Date },
+    emailSentTo:     { type: String, default: '' },
+    createdBy:       { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
+    createdByName:   { type: String, default: '' },
+    createdAt:       { type: Date, default: Date.now },
+    updatedAt:       { type: Date, default: Date.now }
+});
+const Invoice = mongoose.model('Invoice', invoiceSchema);
+
+// Auto invoice number: BMC/YY-YY/NNNN
+async function generateInvoiceNo() {
+    const now = new Date();
+    const month = now.getMonth();
+    const fy1 = month >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fy2 = fy1 + 1;
+    const fySuffix = `${String(fy1).slice(2)}-${String(fy2).slice(2)}`;
+    const seq = await getNextSequence(`invoiceNo_${fySuffix}`);
+    return `BMC/${fySuffix}/${String(seq).padStart(4, '0')}`;
+}
+
+// Number to Indian words
+function numberToWords(num) {
+    if (num === 0) return 'Zero Only';
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
+                  'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    function cg(n) {
+        if (n===0) return '';
+        if (n<20) return ones[n];
+        if (n<100) return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'');
+        return ones[Math.floor(n/100)]+' Hundred'+(n%100?' '+cg(n%100):'');
+    }
+    let r='';
+    const cr=Math.floor(num/10000000), lk=Math.floor((num%10000000)/100000), th=Math.floor((num%100000)/1000), rest=num%1000;
+    if(cr) r+=cg(cr)+' Crore '; if(lk) r+=cg(lk)+' Lakh ';
+    if(th) r+=cg(th)+' Thousand '; if(rest) r+=cg(rest);
+    return 'INR '+r.trim()+' Only';
+}
+
+// ── Create Invoice ──────────────────────────────────────────────
+app.post('/api/invoices', anyAuth, async (req, res) => {
+    try {
+        const { taskId, clientId, customClientName, invoiceType, lineItems, notes, paymentTerms, invoiceDate } = req.body;
+        let client = null;
+        if (clientId && clientId !== 'CUSTOM') client = await Client.findById(clientId);
+        if (!client && taskId) { const task = await Task.findById(taskId); if (task?.clientId) client = await Client.findById(task.clientId); }
+
+        const cName = client ? client.clientName : (customClientName || 'Walk-in Client');
+        const cStateCode = client ? (client.stateCode || '08') : '08';
+        const cStateName = client ? (client.stateName || '') : 'Rajasthan';
+        const cGstin = client ? (client.gstin || '') : '';
+        const cAddress = client ? [client.address, client.city, client.pincode].filter(Boolean).join(', ') : '';
+        const cEmail = client ? (client.email || '') : '';
+
+        const gstType = invoiceType === 'NON_GST' ? 'NONE' : (cStateCode === '08' ? 'CGST_SGST' : 'IGST');
+
+        let taxableAmount = 0;
+        const items = (lineItems || []).map(i => {
+            const amt = (Number(i.qty)||1)*(Number(i.rate)||0);
+            taxableAmount += amt;
+            return { ...i, amount: amt, qty: Number(i.qty)||1, rate: Number(i.rate)||0 };
+        });
+
+        let cgstAmt=0, sgstAmt=0, igstAmt=0;
+        if (gstType==='CGST_SGST') { cgstAmt=Math.round(taxableAmount*0.09*100)/100; sgstAmt=cgstAmt; }
+        else if (gstType==='IGST') { igstAmt=Math.round(taxableAmount*0.18*100)/100; }
+        const totalAmount = Math.round((taxableAmount+cgstAmt+sgstAmt+igstAmt)*100)/100;
+
+        const invoiceNo = await generateInvoiceNo();
+        let creatorName = 'System';
+        try { const s = await Staff.findById(req.user.id); if(s) creatorName=s.name; } catch(_){}
+
+        const dt = invoiceDate ? new Date(invoiceDate) : new Date();
+        const termDays = parseInt(paymentTerms?.replace(/\D/g,''))||30;
+        const dueDate = new Date(dt.getTime() + termDays*86400000);
+
+        const invoice = await Invoice.create({
+            invoiceNo, taskId: taskId||undefined, clientId: client?._id||undefined,
+            invoiceType: invoiceType||'GST', gstType,
+            lineItems: items, taxableAmount, cgstRate:9, cgstAmt, sgstRate:9, sgstAmt, igstRate:18, igstAmt,
+            totalAmount, amountInWords: numberToWords(Math.round(totalAmount)),
+            clientName: cName, clientGstin: cGstin,
+            clientAddress: cAddress,
+            clientState: cStateName, clientStateCode: cStateCode, clientEmail: cEmail,
+            invoiceDate: dt, dueDate, paymentTerms: paymentTerms||'Net 30', notes: notes||'',
+            createdBy: req.user.id, createdByName: creatorName
+        });
+        if (taskId) await Task.findByIdAndUpdate(taskId, { invoiceStatus:'Raised', finalFees:totalAmount, updatedAt:Date.now() });
+        res.json({ success:true, invoice, message:`Invoice ${invoiceNo} created!` });
+    } catch (err) { res.status(500).json({ error: 'Failed to create invoice: '+err.message }); }
+});
+
+// ── List invoices ───────────────────────────────────────────────
+app.get('/api/invoices', anyAuth, async (req, res) => {
+    try {
+        const { status, clientId, staffId } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+        if (clientId) filter.clientId = clientId;
+        const payload = JSON.parse(atob(req.headers.authorization.split('.')[1]));
+        if (payload.type!=='admin' && payload.role!=='superadmin') filter.createdBy = req.user.id;
+        else if (staffId) filter.createdBy = staffId;
+        const invoices = await Invoice.find(filter).sort({ createdAt:-1 });
+        let totalBilled=0, totalPaid=0, totalPending=0;
+        invoices.forEach(inv => { totalBilled+=inv.totalAmount; if(inv.status==='Paid') totalPaid+=inv.totalAmount; else if(inv.status!=='Cancelled') totalPending+=inv.totalAmount; });
+        res.json({ success:true, invoices, kpis:{ total:invoices.length, totalBilled, totalPaid, totalPending } });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Get single invoice ──────────────────────────────────────────
+app.get('/api/invoices/:id', anyAuth, async (req, res) => {
+    try {
+        const invoice = await Invoice.findById(req.params.id);
+        if (!invoice) return res.status(404).json({ error:'Invoice not found' });
+        res.json({ success:true, invoice });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Update draft invoice ────────────────────────────────────────
+app.put('/api/invoices/:id', anyAuth, async (req, res) => {
+    try {
+        const invoice = await Invoice.findById(req.params.id);
+        if (!invoice) return res.status(404).json({ error:'Invoice not found' });
+        if (invoice.status!=='Draft') return res.status(400).json({ error:'Only draft invoices can be edited' });
+        const updates = { ...req.body, updatedAt: Date.now() };
+        delete updates._id; delete updates.invoiceNo;
+        if (updates.lineItems) {
+            let tax=0; updates.lineItems = updates.lineItems.map(i => { const a=(Number(i.qty)||1)*(Number(i.rate)||0); tax+=a; return {...i,amount:a}; });
+            updates.taxableAmount = tax;
+            const gt = updates.gstType||invoice.gstType;
+            if(gt==='CGST_SGST'){ updates.cgstAmt=Math.round(tax*0.09*100)/100; updates.sgstAmt=updates.cgstAmt; updates.igstAmt=0; }
+            else if(gt==='IGST'){ updates.cgstAmt=0; updates.sgstAmt=0; updates.igstAmt=Math.round(tax*0.18*100)/100; }
+            else{ updates.cgstAmt=0; updates.sgstAmt=0; updates.igstAmt=0; }
+            updates.totalAmount = Math.round((updates.taxableAmount+(updates.cgstAmt||0)+(updates.sgstAmt||0)+(updates.igstAmt||0))*100)/100;
+            updates.amountInWords = numberToWords(Math.round(updates.totalAmount));
+        }
+        const updated = await Invoice.findByIdAndUpdate(req.params.id, updates, { new:true });
+        res.json({ success:true, invoice:updated, message:'Invoice updated!' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Cancel invoice (admin) ──────────────────────────────────────
+app.post('/api/invoices/:id/cancel', adminAuth, async (req, res) => {
+    try {
+        const invoice = await Invoice.findByIdAndUpdate(req.params.id, { status:'Cancelled', updatedAt:Date.now() }, { new:true });
+        res.json({ success:true, invoice, message:'Invoice cancelled' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Mark invoice as Sent ────────────────────────────────────────
+app.post('/api/invoices/:id/send', anyAuth, async (req, res) => {
+    try {
+        const invoice = await Invoice.findById(req.params.id);
+        if (!invoice) return res.status(404).json({ error:'Invoice not found' });
+        invoice.status = 'Sent'; invoice.emailSentAt = new Date(); invoice.emailSentTo = invoice.clientEmail;
+        await invoice.save();
+        res.json({ success:true, invoice, message:`Invoice ${invoice.invoiceNo} marked as sent!` });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ PAYMENT TRACKING MODULE ============
+
+// --- Payment Schema ---
+const paymentSchema = new mongoose.Schema({
+    invoiceId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', required: true },
+    taskId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
+    clientId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+    amount:       { type: Number, required: true },
+    paymentDate:  { type: Date, default: Date.now },
+    paymentMode:  { type: String, enum: ['UPI','NEFT','RTGS','Cheque','Cash','Bank Transfer','Other'], default: 'UPI' },
+    referenceNo:  { type: String, default: '' },  // UTR / Cheque No
+    notes:        { type: String, default: '' },
+    recordedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'Staff' },
+    recordedByName: { type: String, default: '' },
+    createdAt:    { type: Date, default: Date.now }
+});
+const Payment = mongoose.model('Payment', paymentSchema);
+
+// Helper: recalculate invoice payment status after any payment change
+async function recalcInvoicePayment(invoiceId) {
+    const payments = await Payment.find({ invoiceId });
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) return;
+
+    let newStatus = invoice.status;
+    if (totalPaid >= invoice.totalAmount) {
+        newStatus = 'Paid';
+    } else if (totalPaid > 0) {
+        newStatus = 'PartiallyPaid';
+    } else if (invoice.status === 'Paid' || invoice.status === 'PartiallyPaid') {
+        newStatus = 'Sent'; // revert if all payments deleted
+    }
+    await Invoice.findByIdAndUpdate(invoiceId, { status: newStatus, updatedAt: Date.now() });
+
+    // Also update linked task
+    if (invoice.taskId) {
+        let taskPayStatus = 'Pending';
+        if (totalPaid >= invoice.totalAmount) taskPayStatus = 'Received';
+        else if (totalPaid > 0) taskPayStatus = 'Partial';
+        await Task.findByIdAndUpdate(invoice.taskId, {
+            paymentStatus: taskPayStatus,
+            amountReceived: totalPaid,
+            updatedAt: Date.now()
+        });
+    }
+}
+
+// ── Record payment ──────────────────────────────────────────────
+app.post('/api/payments', anyAuth, async (req, res) => {
+    try {
+        const { invoiceId, amount, paymentDate, paymentMode, referenceNo, notes } = req.body;
+        if (!invoiceId || !amount) return res.status(400).json({ error: 'Invoice ID and amount are required' });
+
+        const invoice = await Invoice.findById(invoiceId);
+        if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+        let recorderName = 'System';
+        try { const s = await Staff.findById(req.user.id); if (s) recorderName = s.name; } catch(_) {}
+
+        const payment = await Payment.create({
+            invoiceId,
+            taskId: invoice.taskId || undefined,
+            clientId: invoice.clientId || undefined,
+            amount: Number(amount),
+            paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+            paymentMode: paymentMode || 'UPI',
+            referenceNo: referenceNo || '',
+            notes: notes || '',
+            recordedBy: req.user.id,
+            recordedByName: recorderName
+        });
+
+        // Recalculate invoice + task status
+        await recalcInvoicePayment(invoiceId);
+
+        res.json({ success: true, payment, message: `Payment of ₹${Number(amount).toLocaleString('en-IN')} recorded!` });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to record payment: ' + err.message });
+    }
+});
+
+// ── Get payments for an invoice ─────────────────────────────────
+app.get('/api/payments/invoice/:id', anyAuth, async (req, res) => {
+    try {
+        const payments = await Payment.find({ invoiceId: req.params.id }).sort({ paymentDate: -1 });
+        const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+        const invoice = await Invoice.findById(req.params.id);
+        const outstanding = invoice ? invoice.totalAmount - totalPaid : 0;
+        res.json({ success: true, payments, totalPaid, outstanding, invoiceTotal: invoice?.totalAmount || 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Get all payments (admin) ────────────────────────────────────
+app.get('/api/payments', anyAuth, async (req, res) => {
+    try {
+        const { clientId, startDate, endDate, mode } = req.query;
+        const filter = {};
+        if (clientId) filter.clientId = clientId;
+        if (mode) filter.paymentMode = mode;
+        if (startDate || endDate) {
+            filter.paymentDate = {};
+            if (startDate) filter.paymentDate.$gte = new Date(startDate);
+            if (endDate) filter.paymentDate.$lte = new Date(endDate + 'T23:59:59');
+        }
+
+        // Role check
+        const payload = JSON.parse(atob(req.headers.authorization.split('.')[1]));
+        if (payload.type !== 'admin' && payload.role !== 'superadmin') {
+            filter.recordedBy = req.user.id;
+        }
+
+        const payments = await Payment.find(filter).sort({ paymentDate: -1 });
+        const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+        res.json({ success: true, payments, totalReceived, count: payments.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Delete payment (admin only) ─────────────────────────────────
+app.delete('/api/payments/:id', adminAuth, async (req, res) => {
+    try {
+        const payment = await Payment.findById(req.params.id);
+        if (!payment) return res.status(404).json({ error: 'Payment not found' });
+        const invoiceId = payment.invoiceId;
+        await Payment.findByIdAndDelete(req.params.id);
+        // Recalculate
+        await recalcInvoicePayment(invoiceId);
+        res.json({ success: true, message: 'Payment deleted and invoice status recalculated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

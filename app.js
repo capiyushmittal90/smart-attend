@@ -16,6 +16,15 @@ let dashboardCharts = {};
 const API = '';  // Same-origin
 
 // ============ HELPERS ============
+function togglePwd(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    const isHidden = input.type === 'password';
+    input.type = isHidden ? 'text' : 'password';
+    btn.textContent = isHidden ? '🙈' : '👁️';
+    btn.classList.toggle('open', isHidden);
+}
+
 function api(method, path, body, raw) {
     const headers = { 'Content-Type': 'application/json' };
     if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
@@ -62,34 +71,21 @@ function showScreen(id) {
 }
 
 // ============ EMPLOYEE AUTH ============
-async function empSendOTP() {
+async function empLogin(e) {
+    if (e) e.preventDefault();
     const email = document.getElementById('emp-login-email').value.trim();
-    if (!email) { toast('Please enter your email', 'warning'); return; }
-
-    const btn = document.getElementById('btn-emp-send-otp');
-    btn.disabled = true; btn.textContent = '⏳ Sending OTP…';
-
-    try {
-        const data = await api('POST', '/api/auth/employee-login', { email });
-        toast(`✅ OTP sent to ${email}`, 'success');
-        document.getElementById('emp-login-step1').style.display = 'none';
-        document.getElementById('emp-login-step2').style.display = 'block';
-        document.getElementById('emp-otp-name').textContent = data.employeeName;
-        document.getElementById('emp-otp-email-store').value = email;
-    } catch (err) {
-        toast('❌ ' + err.message, 'error');
-    } finally {
-        btn.disabled = false; btn.textContent = '📨 Send OTP';
+    const password = document.getElementById('emp-login-password').value.trim();
+    
+    if (!email || !password) { 
+        toast('Please enter both email and password', 'warning'); 
+        return; 
     }
-}
 
-async function empVerifyOTP() {
-    const email = document.getElementById('emp-otp-email-store').value;
-    const otp = document.getElementById('emp-otp-input').value.trim();
-    if (!otp) { toast('Enter the OTP', 'warning'); return; }
+    const btn = document.getElementById('btn-emp-login');
+    btn.disabled = true; btn.textContent = '⏳ Logging In…';
 
     try {
-        const data = await api('POST', '/api/auth/verify-otp', { email, otp });
+        const data = await api('POST', '/api/auth/employee-login', { email, password });
         authToken = data.token;
         currentUser = { ...data.employee, type: 'employee' };
         localStorage.setItem('sa_token', authToken);
@@ -98,6 +94,8 @@ async function empVerifyOTP() {
         showScreen('screen-emp-dashboard');
     } catch (err) {
         toast('❌ ' + err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = '👤 Log In';
     }
 }
 
@@ -121,18 +119,29 @@ async function loadEmpTodayStatus() {
         const todayOut = logs.find(l => l.date === today && l.type === 'OUT');
 
         const statusEl = document.getElementById('emp-today-status');
+        const btnIn = document.getElementById('btn-emp-checkin');
+        const btnOut = document.getElementById('btn-emp-checkout');
+        const btnWebIn = document.getElementById('btn-emp-web-checkin');
+        const btnWebOut = document.getElementById('btn-emp-web-checkout');
+
         if (todayIn && todayOut) {
             statusEl.innerHTML = `<span class="badge badge-out">Checked Out</span> In: ${todayIn.time} | Out: ${todayOut.time} | ${todayOut.status}`;
-            document.getElementById('btn-emp-checkin').disabled = true;
-            document.getElementById('btn-emp-checkout').disabled = true;
+            if(btnIn) btnIn.disabled = true;
+            if(btnOut) btnOut.disabled = true;
+            if(btnWebIn) btnWebIn.disabled = true;
+            if(btnWebOut) btnWebOut.disabled = true;
         } else if (todayIn) {
             statusEl.innerHTML = `<span class="badge badge-in">Checked In</span> at ${todayIn.time} — <span class="badge ${todayIn.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${todayIn.status}</span>`;
-            document.getElementById('btn-emp-checkin').disabled = true;
-            document.getElementById('btn-emp-checkout').disabled = false;
+            if(btnIn) btnIn.disabled = true;
+            if(btnOut) btnOut.disabled = false;
+            if(btnWebIn) btnWebIn.disabled = true;
+            if(btnWebOut) btnWebOut.disabled = false;
         } else {
             statusEl.innerHTML = `<span class="badge badge-absent">Not Checked In</span>`;
-            document.getElementById('btn-emp-checkin').disabled = false;
-            document.getElementById('btn-emp-checkout').disabled = true;
+            if(btnIn) btnIn.disabled = false;
+            if(btnOut) btnOut.disabled = true;
+            if(btnWebIn) btnWebIn.disabled = false;
+            if(btnWebOut) btnWebOut.disabled = true;
         }
     } catch (err) {
         console.error(err);
@@ -144,15 +153,20 @@ async function loadEmpRecentLogs() {
         const logs = await api('GET', '/api/attendance/my-logs');
         const tbody = document.getElementById('emp-logs-tbody');
         if (logs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No records yet</td></tr>'; return; }
-        tbody.innerHTML = logs.slice(0, 20).map(l => `
+        tbody.innerHTML = logs.slice(0, 20).map(l => {
+            const photoCell = l.snapshot ? `<img src="${l.snapshot}" class="thumb" onclick="window.open('${l.snapshot}', '_blank')" style="cursor:pointer;" title="Click to view">` : `<div class="thumb" style="display:flex;align-items:center;justify-content:center;background:#eee;font-size:0.6rem;text-align:center;">No Photo</div>`;
+            const locText = l.location || (l.coords ? `${l.coords.lat.toFixed(4)}, ${l.coords.lng.toFixed(4)}` : 'Unknown Location');
+            const locCell = l.mapUrl ? `<a href="${l.mapUrl}" target="_blank" class="coords-link">📍 ${locText.substring(0, 30)}…</a>` : (locText.substring(0, 30) + '…');
+            return `
             <tr>
                 <td>${l.date}</td>
                 <td>${l.time}</td>
                 <td><span class="badge ${l.type === 'IN' ? 'badge-in' : 'badge-out'}">${l.type}</span></td>
                 <td>${l.type === 'IN' ? `<span class="badge ${l.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${l.status}</span>` : l.status}</td>
-                <td>${l.location ? l.location.substring(0, 40) + '…' : '—'}</td>
-            </tr>
-        `).join('');
+                <td>${photoCell}</td>
+                <td>${locCell}</td>
+            </tr>`;
+        }).join('');
     } catch (err) { console.error(err); }
 }
 
@@ -246,6 +260,47 @@ async function empCaptureAndMark(type) {
     }
 }
 
+// Web manual fallback
+async function empWebCheckMark(type) {
+    const endpoint = type === 'IN' ? '/api/attendance/checkin' : '/api/attendance/checkout';
+    const btnId = type === 'IN' ? 'btn-emp-web-checkin' : 'btn-emp-web-checkout';
+    const btn = document.getElementById(btnId);
+    if(btn) { btn.disabled = true; btn.textContent = '⏳ Processing...'; }
+
+    try {
+        let ipInfo = null;
+        try {
+            const resp = await fetch('https://ipapi.co/json/');
+            ipInfo = await resp.json();
+        } catch(e) {}
+
+        const locString = ipInfo ? `${ipInfo.city}, ${ipInfo.region}, ${ipInfo.country_name}` : 'Web Dashboard / Manual Entry';
+        
+        const data = await api('POST', endpoint, {
+            location: locString,
+            coords: null,
+            ip: ipInfo ? ipInfo.ip : null,
+            mapUrl: null,
+            snapshot: '' 
+        });
+        
+        if (type === 'IN') {
+            const statusMsg = data.status === 'LATE' ? '⚠️ LATE' : '✅ ON TIME';
+            toast(`Web Check-In marked! ${statusMsg}`, data.status === 'LATE' ? 'warning' : 'success');
+        } else {
+            toast(`Web Check-Out marked! Working: ${data.workingHours}`, 'success');
+        }
+        setTimeout(() => { initEmpDashboard(); }, 1500);
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = type === 'IN' ? '🌐 Web Check-In' : '🌐 Web Check-Out';
+        }
+    }
+}
+
 // ============ CAMERA ============
 async function startCamera(videoId) {
     const video = document.getElementById(videoId);
@@ -277,23 +332,47 @@ function fetchLocation(badgeId) {
         badge.innerHTML = '<span class="pulse-dot"></span> Geolocation not supported';
         return;
     }
+    
+    // Attempt 1: Browser GPS
     navigator.geolocation.getCurrentPosition(
         async (pos) => {
             const { latitude, longitude } = pos.coords;
             currentCoords = { lat: latitude, lng: longitude };
+            
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`, { headers: { 'Accept-Language': 'en' } });
+                // Primary: OpenStreetMap Nominatim for exact street address
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`);
                 const data = await res.json();
-                currentLocation = data.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-            } catch { currentLocation = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`; }
-            badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
+                if (data && data.display_name) {
+                    // Extract exactly what's needed for a clean short address if available, else use full
+                    currentLocation = data.display_name;
+                } else {
+                    throw new Error("Nominatim failed");
+                }
+            } catch (err1) { 
+                try {
+                    // Fallback: BigDataCloud for City/State level
+                    const res2 = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+                    const data2 = await res2.json();
+                    if (data2.locality) {
+                        currentLocation = `${data2.locality}, ${data2.principalSubdivision}, ${data2.countryName}`;
+                    } else {
+                        throw new Error("BigDataCloud failed");
+                    }
+                } catch (err2) {
+                    // Final Fallback: Raw Coordinates
+                    currentLocation = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+                }
+            }
+            badge.innerHTML = `<span class="pulse-dot"></span> 📍 ${currentLocation.substring(0, 40)}...`;
         },
         () => {
+            // Attempt 2: IP-based Location (if GPS is denied)
             fetch('https://ipapi.co/json/').then(r => r.json()).then(d => {
                 currentIP = d.ip || null;
-                currentLocation = `${d.city || ''}, ${d.region || ''}, ${d.country_name || ''}`;
+                currentLocation = `${d.city || 'Unknown City'}, ${d.region || ''}, ${d.country_name || ''}`;
                 if (d.latitude && d.longitude) currentCoords = { lat: d.latitude, lng: d.longitude };
-                badge.innerHTML = `<span class="pulse-dot"></span> ${currentLocation}`;
+                badge.innerHTML = `<span class="pulse-dot"></span> 🌐 ${currentLocation}`;
             }).catch(() => { badge.innerHTML = '<span class="pulse-dot"></span> Could not determine location'; });
         },
         { enableHighAccuracy: true, timeout: 10000 }
@@ -330,7 +409,16 @@ function initAdminPortal() {
     // Show/hide superadmin-only tabs
     const adminTab = document.getElementById('tab-btn-admins');
     if (adminTab) adminTab.style.display = currentUser.role === 'superadmin' ? '' : 'none';
-    switchTab('dashboard');
+    
+    // Check URL hash for direct tab navigation
+    let startTab = 'dashboard';
+    if (window.location.hash) {
+        const hash = window.location.hash.substring(1); // remove #
+        if (document.getElementById('tab-' + hash) || hash === 'attendance') {
+            startTab = hash;
+        }
+    }
+    switchTab(startTab);
 }
 
 function switchTab(name) {
@@ -341,7 +429,14 @@ function switchTab(name) {
     if (panel) panel.classList.add('active');
     if (btn) btn.classList.add('active');
 
+    // For attendance sub-tabs (staff, reports, leaves), highlight Hub sidebar btn
+    if (['staff','reports','leaves'].includes(name)) {
+        const dashBtn = document.getElementById('tab-btn-dashboard');
+        if(dashBtn) dashBtn.classList.add('active');
+    }
+
     if (name === 'dashboard') loadDashboard();
+    if (name === 'attendance') loadDashboard();
     if (name === 'staff') loadStaffList();
     if (name === 'reports') loadReports();
     if (name === 'leaves') loadLeaveRequests();
@@ -349,31 +444,107 @@ function switchTab(name) {
     if (name === 'admins') loadAdminList();
 }
 
+// Attendance sub-navigation handler
+function switchAttSub(sub) {
+    // Update active state of sub-nav buttons
+    document.querySelectorAll('.att-sub-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('att-sub-' + sub);
+    if(btn) btn.classList.add('active');
+
+    if (sub === 'overview') {
+        // Show attendance tab with overview panel
+        switchTab('attendance');
+    } else if (sub === 'staff') {
+        switchTab('staff');
+    } else if (sub === 'reports') {
+        switchTab('reports');
+    } else if (sub === 'leaves') {
+        switchTab('leaves');
+    }
+}
+
 // ============ DASHBOARD ============
 async function loadDashboard() {
     try {
         const d = await api('GET', '/api/attendance/dashboard');
-        document.getElementById('dash-total-staff').textContent = d.totalStaff;
-        document.getElementById('dash-present').textContent = d.presentToday;
-        document.getElementById('dash-absent').textContent = d.absentToday;
-        document.getElementById('dash-late').textContent = d.lateTodayCount;
-        document.getElementById('dash-ontime').textContent = d.onTimeCount;
-        document.getElementById('dash-leaves').textContent = d.leavesToday;
-        document.getElementById('dash-avg-hours').textContent = d.avgHours + 'h';
-        document.getElementById('dash-pending-leaves').textContent = d.pendingLeaves;
+        // Populate attendance stat cards (may be in attendance tab)
+        const el = id => document.getElementById(id);
+        if(el('dash-total-staff')) el('dash-total-staff').textContent = d.totalStaff;
+        if(el('dash-present')) el('dash-present').textContent = d.presentToday;
+        if(el('dash-absent')) el('dash-absent').textContent = d.absentToday;
+        if(el('dash-late')) el('dash-late').textContent = d.lateTodayCount;
+        if(el('dash-ontime')) el('dash-ontime').textContent = d.onTimeCount;
+        if(el('dash-leaves')) el('dash-leaves').textContent = d.leavesToday;
+        if(el('dash-avg-hours')) el('dash-avg-hours').textContent = d.avgHours + 'h';
+        if(el('dash-pending-leaves')) el('dash-pending-leaves').textContent = d.pendingLeaves;
 
-        // Weekly Chart
-        renderWeeklyChart(d.weeklyData);
-        // Department Chart
-        renderDeptChart(d.deptBreakdown);
+        // Populate hub attendance card
+        if(el('hub-att-staff')) el('hub-att-staff').textContent = d.totalStaff;
+        if(el('hub-att-present')) el('hub-att-present').textContent = d.presentToday;
+        if(el('hub-att-absent')) el('hub-att-absent').textContent = d.absentToday;
+
+        // Render charts only when canvas is in DOM and visible
+        if(el('weekly-chart')) renderWeeklyChart(d.weeklyData);
+        if(el('dept-chart')) renderDeptChart(d.deptBreakdown);
         // Top Late Table
         renderTopLate(d.topLate);
         // Absent List
         renderAbsentList(d.absentList);
     } catch (err) {
-        toast('Failed to load dashboard', 'error');
-        console.error(err);
+        console.error('Dashboard load error:', err);
     }
+    // Load module hub stats
+    loadModuleHubStats();
+}
+
+async function loadModuleHubStats() {
+    const INR = n => '₹' + Number(n||0).toLocaleString('en-IN');
+    const hdrs = { Authorization: 'Bearer ' + localStorage.getItem('sa_token') };
+    // Tasks
+    try {
+        const r = await fetch('/api/tasks/all', {headers: hdrs});
+        const d = await r.json();
+        const tasks = d.tasks || [];
+        const el1 = document.getElementById('hub-tasks-total');
+        const el2 = document.getElementById('hub-tasks-pending');
+        if(el1) el1.textContent = tasks.length;
+        if(el2) el2.textContent = tasks.filter(t => t.workStatus !== 'Completed').length;
+    } catch(_){}
+    // Clients
+    try {
+        const r = await fetch('/api/clients', {headers: hdrs});
+        const d = await r.json();
+        const clients = d.clients || [];
+        const el1 = document.getElementById('hub-clients-total');
+        const el2 = document.getElementById('hub-clients-gst');
+        if(el1) el1.textContent = clients.length;
+        if(el2) el2.textContent = clients.filter(c => c.gstin && c.gstin.length >= 15).length;
+    } catch(_){}
+    // Invoices
+    try {
+        const r = await fetch('/api/invoices', {headers: hdrs});
+        const d = await r.json();
+        const invoices = d.invoices || [];
+        const el1 = document.getElementById('hub-inv-total');
+        const el2 = document.getElementById('hub-inv-billed');
+        if(el1) el1.textContent = invoices.length;
+        const total = invoices.reduce((s,i) => s + (i.totalAmount||0), 0);
+        if(el2) el2.textContent = INR(total);
+        // Revenue stats
+        const received = invoices.filter(i => i.status === 'Paid').reduce((s,i) => s + (i.totalAmount||0), 0);
+        const outstanding = total - received;
+        const el3 = document.getElementById('hub-rev-received');
+        const el4 = document.getElementById('hub-rev-outstanding');
+        if(el3) el3.textContent = INR(received);
+        if(el4) el4.textContent = INR(outstanding);
+    } catch(_){}
+    // My tasks
+    try {
+        const r = await fetch('/api/tasks/my', {headers: hdrs});
+        const d = await r.json();
+        const el = document.getElementById('hub-my-tasks');
+        if(el) el.textContent = (d.tasks || []).length;
+    } catch(_){}
 }
 
 function renderWeeklyChart(data) {
@@ -454,7 +625,7 @@ async function loadStaffList() {
         container.innerHTML = staff.map((emp, i) => `
             <div class="staff-card" data-id="${emp._id}">
                 <div class="card-actions">
-                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}')" title="Edit">✏️</button>
+                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}', ${emp.baseSalary || 0})" title="Edit">✏️</button>
                     <button class="btn-card-action delete" onclick="removeStaff('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')" title="Remove">✕</button>
                 </div>
                 <div class="emp-code">${emp.code}</div>
@@ -476,14 +647,17 @@ async function addStaff(e) {
     const name = document.getElementById('emp-name').value.trim();
     const dept = document.getElementById('emp-dept').value.trim();
     const email = document.getElementById('emp-email').value.trim();
+    const password = document.getElementById('emp-password').value.trim();
+    const baseSalary = document.getElementById('emp-salary').value.trim();
     const shift = document.getElementById('emp-shift-select')?.value || 'General';
+    
     if (!code || !name || !dept || !email) { toast('All fields required', 'warning'); return false; }
 
     const btn = document.getElementById('btn-add-staff');
     btn.disabled = true; btn.textContent = '⏳ Adding…';
 
     try {
-        await api('POST', '/api/staff', { code, name, dept, email, shift });
+        await api('POST', '/api/staff', { code, name, dept, email, password, baseSalary, shift });
         toast(`${name} added ✓`, 'success');
         document.getElementById('staff-form').reset();
         loadStaffList();
@@ -504,13 +678,14 @@ async function removeStaff(id, name) {
     } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
-function openEditModal(id, code, name, dept, email, shift) {
+function openEditModal(id, code, name, dept, email, shift, baseSalary) {
     document.getElementById('edit-id').value = id;
     document.getElementById('edit-code').value = code;
     document.getElementById('edit-name').value = name;
     document.getElementById('edit-dept').value = dept;
     document.getElementById('edit-email').value = email;
     document.getElementById('edit-shift').value = shift || 'General';
+    document.getElementById('edit-salary').value = baseSalary || 0;
     document.getElementById('edit-modal').style.display = 'flex';
 }
 function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
@@ -521,10 +696,11 @@ async function saveEdit() {
     const dept = document.getElementById('edit-dept').value.trim();
     const email = document.getElementById('edit-email').value.trim();
     const shift = document.getElementById('edit-shift').value;
+    const baseSalary = document.getElementById('edit-salary').value;
     if (!name || !dept || !email) { toast('All fields required', 'warning'); return; }
 
     try {
-        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift });
+        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift, baseSalary });
         toast(`${name} updated ✓`, 'success');
         closeEditModal(); loadStaffList();
     } catch (err) { toast('❌ ' + err.message, 'error'); }
@@ -671,13 +847,19 @@ async function loadReports() {
             const statusBadge = l.type === 'IN'
                 ? `<span class="badge ${l.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${l.status}</span>` : l.status || '—';
             const typeBadge = `<span class="badge ${l.type === 'IN' ? 'badge-in' : 'badge-out'}">${l.type}</span>`;
-            const coordsCell = l.coords && l.coords.lat
-                ? `<a href="${l.mapUrl}" target="_blank" class="coords-link">${l.coords.lat.toFixed(4)}, ${l.coords.lng.toFixed(4)}</a>` : '—';
+            
+            const photoCell = l.snapshot ? `<img src="${l.snapshot}" class="thumb" onclick="window.open('${l.snapshot}', '_blank')" style="cursor:pointer;" title="Click to view">` : `<div class="thumb" style="display:flex;align-items:center;justify-content:center;background:#eee;font-size:0.6rem;text-align:center;">No Photo</div>`;
+            
+            const locText = l.location || (l.coords ? `${l.coords.lat.toFixed(4)}, ${l.coords.lng.toFixed(4)}` : 'Unknown Location');
+            const locCell = l.mapUrl ? `<a href="${l.mapUrl}" target="_blank" class="coords-link">📍 ${locText}</a>` : locText;
+
             return `<tr>
                 <td>${l.date}</td><td>${l.time}</td>
                 <td>${typeBadge}</td><td>${statusBadge}</td>
                 <td>${l.code}</td><td><strong>${l.name}</strong></td>
-                <td>${l.department}</td><td>${coordsCell}</td>
+                <td>${l.department}</td>
+                <td>${photoCell}</td>
+                <td>${locCell}</td>
             </tr>`;
         }).join('');
 
@@ -836,7 +1018,50 @@ async function loadSettingsUI() {
         document.getElementById('setting-geofence').value = s.geofenceRadius;
         // Shifts
         renderShiftsUI(s.shifts || []);
+        // Holidays
+        renderHolidaysUI(s.holidays || []);
     } catch (err) { console.error(err); }
+}
+
+function renderHolidaysUI(holidays) {
+    const list = document.getElementById('holidays-list');
+    if (!list) return;
+    if (holidays.length === 0) {
+        list.innerHTML = '<p class="empty-msg" style="margin:5px 0;">No holidays configured.</p>';
+        return;
+    }
+    // Sort by date ascending
+    holidays.sort((a,b) => new Date(a.date) - new Date(b.date));
+    list.innerHTML = holidays.map(h => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#f4f7f9; padding:8px 12px; border-radius:6px; border-left: 3px solid #C8A951;">
+            <div>
+                <strong>${h.date}</strong> — ${h.name}
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeHoliday('${h.date}', '${h.name}')">✕</button>
+        </div>
+    `).join('');
+}
+
+async function addHoliday() {
+    const date = document.getElementById('holiday-date').value;
+    const name = document.getElementById('holiday-name').value.trim();
+    if (!date || !name) { toast('Enter both holiday Date and Name', 'warning'); return; }
+    try {
+        const data = await api('POST', '/api/settings/holidays', { date, name });
+        toast('Holiday added ✓', 'success');
+        document.getElementById('holiday-date').value = '';
+        document.getElementById('holiday-name').value = '';
+        renderHolidaysUI(data.holidays);
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
+}
+
+async function removeHoliday(date, name) {
+    if (!confirm(`Remove ${name} from holidays?`)) return;
+    try {
+        const data = await api('DELETE', `/api/settings/holidays/${date}`);
+        toast('Holiday removed', 'info');
+        renderHolidaysUI(data.holidays);
+    } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
 function renderShiftsUI(shifts) {
@@ -980,4 +1205,77 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initDragDrop();
     startGeofenceWatch();
+
+    // Check query params for autologin
+    const params = new URLSearchParams(location.search);
+    if (params.get('admin') === '1') {
+        showScreen('screen-admin-login');
+        const token = localStorage.getItem('sa_admin_token');
+        if (token) {
+            authToken = token;
+            currentUser = JSON.parse(localStorage.getItem('sa_user'));
+            showScreen('screen-admin-portal');
+            initAdminPortal();
+        }
+    }
 });
+
+// ============ PAYROLL GENERATOR ============
+function openSalaryModal() {
+    document.getElementById('modal-salary').style.display = 'flex';
+    document.getElementById('payroll-table').style.display = 'none';
+    document.getElementById('payroll-stats').style.display = 'none';
+    
+    // Set default month to current
+    const picker = document.getElementById('payroll-month-picker');
+    const now = new Date();
+    picker.value = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+}
+
+async function generateSalaryReport() {
+    const month = document.getElementById('payroll-month-picker').value;
+    if (!month) { toast('Please select a month', 'warning'); return; }
+    
+    const loading = document.getElementById('payroll-loading');
+    const table = document.getElementById('payroll-table');
+    const tbody = document.getElementById('payroll-tbody');
+    const stats = document.getElementById('payroll-stats');
+    
+    loading.style.display = 'block';
+    table.style.display = 'none';
+    stats.style.display = 'none';
+    tbody.innerHTML = '';
+    
+    try {
+        const data = await api('GET', `/api/payroll/calculate/${month}`);
+        
+        // Update stats
+        document.getElementById('py-total').textContent = data.totalDays;
+        document.getElementById('py-sun').textContent = data.sundays;
+        document.getElementById('py-hol').textContent = data.holidaysCount;
+        stats.style.display = 'flex';
+        
+        if (data.records.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No active staff members found.</td></tr>';
+        } else {
+            tbody.innerHTML = data.records.map(r => `
+                <tr>
+                    <td><strong>${r.code}</strong></td>
+                    <td>${r.name}<br><small style="color:#666">${r.dept}</small></td>
+                    <td>₹ ${r.baseSalary.toLocaleString('en-IN')}</td>
+                    <td>${r.actualDaysWorked} d</td>
+                    <td><span style="color:#dc3545">${r.lateDaysCount} late</span></td>
+                    <td>${r.leavesTaken} d</td>
+                    <td><strong>${r.paidDays} d</strong></td>
+                    <td style="font-size:16px; color:#C8A951; font-weight:800;">₹ ${r.calculatedSalary.toLocaleString('en-IN')}</td>
+                </tr>
+            `).join('');
+        }
+        
+        table.style.display = 'table';
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        loading.style.display = 'none';
+    }
+}
