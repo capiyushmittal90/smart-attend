@@ -164,8 +164,12 @@
     <!-- RIGHT: Preview -->
     <div class="col-lg-7">
       <div class="builder-card" style="position:sticky;top:20px;">
-        <p class="section-title"><i class="fa-solid fa-eye me-1"></i>Live Preview</p>
-        <div class="preview-page" id="previewArea"></div>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <p class="section-title mb-0"><i class="fa-solid fa-eye me-1"></i>Live Preview</p>
+          <span class="badge bg-light text-primary border"><i class="fa-solid fa-pen-to-square me-1"></i>Editable</span>
+        </div>
+        <p class="text-muted small mb-3">You can click directly inside the document below to manually edit any text before downloading.</p>
+        <div class="preview-page" id="previewArea" contenteditable="true" spellcheck="false" style="outline:none;"></div>
       </div>
     </div>
   </div>
@@ -174,11 +178,14 @@
 <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 
 <script>
 const API = '';
 let token='', clientList=[], selectedClient=null;
-const FIRM = { name:'Aayu Consulting Group Pvt Ltd', address:'11-K-3 Sahkar Marg, Jaipur, Rajasthan 302015', gstin:'08ABKFA4108L1ZC', email:'capiyushmittal80@gmail.com' };
+let apfChecklists = [];
+const FIRM = { name:'Aayu Consulting Group Pvt Ltd', address:'11-K-3 Sahkar Marg, Jaipur, Rajasthan 302015', gstin:'08ABKFA4108L1ZC', email:'capiyushmittal90@gmail.com' };
 
 window.addEventListener('DOMContentLoaded', async () => {
   token = localStorage.getItem('sa_token');
@@ -186,14 +193,81 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('agStart').valueAsDate = new Date();
   const end = new Date(); end.setFullYear(end.getFullYear()+1);
   document.getElementById('agEnd').valueAsDate = end;
+  
+  // Load Checklists
+  try {
+    const res = await fetch(`${API}/api/templates`, { headers: { Authorization: 'Bearer ' + token } });
+    if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+            apfChecklists = data.templates;
+            const docType = document.getElementById('docType');
+            apfChecklists.forEach((chk, index) => {
+                const opt = document.createElement('option');
+                opt.value = 'checklist_' + index;
+                opt.textContent = chk.title;
+                docType.appendChild(opt);
+            });
+        }
+    }
+  } catch(e) { console.error('Failed to load checklists', e); }
+
   document.getElementById('docType').addEventListener('change', function() {
+    window.currentChecklistIdx = null; // reset checklist cache on change
     document.getElementById('scopeSection').style.display = this.value==='agreement'?'':'none';
     if(document.getElementById('feeSection')) document.getElementById('feeSection').style.display = this.value==='agreement'?'':'none';
     document.getElementById('nocSection').style.display = this.value==='noc'?'':'none';
+    renderPreview();
   });
   await loadClients();
+  const urlParams = new URLSearchParams(window.location.search);
+  const taskId = urlParams.get('taskId');
+  if (taskId) {
+      await prepopulateFromTask(taskId);
+  }
   renderPreview();
 });
+
+async function prepopulateFromTask(taskId) {
+    try {
+        const res = await fetch(`${API}/api/tasks/${taskId}`, { headers:{ Authorization:'Bearer '+token } });
+        if(!res.ok) return;
+        const data = await res.json();
+        const t = data.task;
+        if(t.clientId) {
+           document.getElementById('agClient').value = typeof t.clientId === 'object' ? t.clientId._id : t.clientId;
+           onClientSelect();
+        }
+        
+        const scopeTitle = [t.serviceType, t.subService].filter(Boolean).join(' - ');
+        const timeInfo = t.estimatedTime ? ` (Estimated Time: ${t.estimatedTime})` : '';
+        const fullScope = scopeTitle + timeInfo;
+        
+        if (fullScope.trim() !== '') {
+            document.getElementById('scopeItems').innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'scope-item';
+            div.innerHTML = `<input type="text" class="form-control" value="${fullScope}" oninput="renderPreview()"><button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>`;
+            document.getElementById('scopeItems').appendChild(div);
+        }
+        
+        if (t.estimatedFees || t.finalFees) {
+            document.getElementById('feeItems').innerHTML = '';
+            const feeVal = t.finalFees || t.estimatedFees;
+            const feeDiv = document.createElement('div');
+            feeDiv.className = 'fee-item d-flex gap-2 mb-2';
+            feeDiv.innerHTML = `
+              <input type="text" class="form-control" value="Professional Fees for ${scopeTitle}" style="flex:2" oninput="renderPreview()">
+              <select class="form-select" style="flex:1" onchange="renderPreview()">
+                 <option value="fixed" selected>Fixed (₹)</option>
+                 <option value="percent">Percent (%)</option>
+              </select>
+              <input type="number" class="form-control" value="${feeVal}" style="flex:1" oninput="renderPreview()">
+              <button class="btn btn-sm" style="background:#FEE2E2;color:#DC2626;" onclick="this.parentElement.remove();renderPreview()"><i class="fa-solid fa-xmark"></i></button>`;
+            document.getElementById('feeItems').appendChild(feeDiv);
+        }
+    } catch(err) { console.error('Failed to load task details for agreement', err); }
+}
 
 async function loadClients() {
   try {
@@ -259,87 +333,173 @@ function renderPreview() {
   if (type === 'agreement') {
     const scopes = getScopes();
     const scopeList = scopes.map((s,i)=>`<li>${s}</li>`).join('');
+    
+    if(window.tinymce && tinymce.get('editor-doc')) { tinymce.remove('#editor-doc'); }
+    
     pa.innerHTML = `
-      <div style="text-align:center;margin-bottom:24px;">
-        <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
-        <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin} | Email: ${FIRM.email}</p>
-      </div>
-      <h2>ENGAGEMENT LETTER / AGREEMENT</h2>
-      <p><strong>Date:</strong> ${fmtDate(document.getElementById('agStart').value)}</p>
-      <p><strong>To,</strong><br>
-      <strong>${c?.clientName||'[Client Name]'}</strong><br>
-      ${document.getElementById('agClientAddress').value || '[Address]'}<br>
-      GSTIN/PAN: ${document.getElementById('agClientGstin').value || 'N/A'}<br>
-      Attn: <strong>${document.getElementById('agPerson').value||'[Authorized Person]'}</strong>, ${document.getElementById('agDesig').value||'[Designation]'}</p>
+      <div id="editor-doc" class="checklist-content" style="font-family:'Times New Roman', serif; font-size:14px; line-height:1.6; outline:1px dashed #ccc; padding:10px; border-radius:4px; min-height:100px;">
+        <div style="text-align:center;margin-bottom:24px;">
+          <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
+          <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin} | Email: ${FIRM.email}</p>
+          <hr style="border-color:#ccc; margin:15px 0;">
+        </div>
+        <h2 style="text-align:center;text-decoration:underline;margin-bottom:20px;">ENGAGEMENT LETTER / AGREEMENT</h2>
+        <p><strong>Date:</strong> ${fmtDate(document.getElementById('agStart').value)}</p>
+        <p><strong>To,</strong><br>
+        <strong>${c?.clientName||'[Client Name]'}</strong><br>
+        ${document.getElementById('agClientAddress').value || '[Address]'}<br>
+        GSTIN/PAN: ${document.getElementById('agClientGstin').value || 'N/A'}<br>
+        Attn: <strong>${document.getElementById('agPerson').value||'[Authorized Person]'}</strong>, ${document.getElementById('agDesig').value||'[Designation]'}</p>
 
-      <p>Dear Sir/Madam,</p>
-      <p>We are pleased to confirm our engagement as your Chartered Accountants and Professional Consultants. This letter sets out the terms under which <strong>${FIRM.name}</strong> shall provide professional services.</p>
+        <p>Dear Sir/Madam,</p>
+        <p>We are pleased to confirm our engagement as your Chartered Accountants and Professional Consultants. This letter sets out the terms under which <strong>${FIRM.name}</strong> shall provide professional services.</p>
 
-      <h3 style="font-size:15px;text-decoration:underline;">1. SCOPE OF WORK</h3>
-      <ol>${scopeList || '<li>[Please add scope items]</li>'}</ol>
+        <h3 style="font-size:15px;text-decoration:underline;">1. SCOPE OF WORK</h3>
+        <ol>${scopeList || '<li>[Please add scope items]</li>'}</ol>
 
-      <h3 style="font-size:15px;text-decoration:underline;">2. TERM</h3>
-      <p>This engagement shall commence from <strong>${fmtDate(document.getElementById('agStart').value)}</strong> and continue until <strong>${fmtDate(document.getElementById('agEnd').value)}</strong>, unless terminated earlier by either party with 30 days written notice.</p>
+        <h3 style="font-size:15px;text-decoration:underline;">2. TERM</h3>
+        <p>This engagement shall commence from <strong>${fmtDate(document.getElementById('agStart').value)}</strong> and continue until <strong>${fmtDate(document.getElementById('agEnd').value)}</strong>, unless terminated earlier by either party with 30 days written notice.</p>
 
-      <h3 style="font-size:15px;text-decoration:underline;">3. PROFESSIONAL FEES</h3>
-      <p>The professional fees for the above scope of services shall be as follows, exclusive of applicable GST:</p>
-      <ul style="margin:8px 0;">${
-        getFees().length ? getFees().map(f => {
-           let amtStr = f.type === 'percent' ? `${f.value}%` : `₹${Number(f.value||0).toLocaleString('en-IN')}/-`;
-           return `<li><strong>${f.particular}:</strong> ${amtStr}</li>`;
-        }).join('') : '<li>[Please add fee details]</li>'
-      }</ul>
-      <p>Payment shall be made as per the agreed payment schedule. Any delay beyond due date will attract interest at 18% p.a.</p>
+        <h3 style="font-size:15px;text-decoration:underline;">3. PROFESSIONAL FEES</h3>
+        <p>The professional fees for the above scope of services shall be as follows, exclusive of applicable GST:</p>
+        <ul style="margin:8px 0;">${
+          getFees().length ? getFees().map(f => {
+            let amtStr = f.type === 'percent' ? `${f.value}%` : `₹${Number(f.value||0).toLocaleString('en-IN')}/-`;
+            return `<li><strong>${f.particular}:</strong> ${amtStr}</li>`;
+          }).join('') : '<li>[Please add fee details]</li>'
+        }</ul>
+        <p>Payment shall be made as per the agreed payment schedule. Any delay beyond due date will attract interest at 18% p.a.</p>
 
-      <h3 style="font-size:15px;text-decoration:underline;">4. DEPARTMENTAL FEES & LIAISONING</h3>
-      <p>This is to bring to your kind attention that our professional fees, as agreed upon in our engagement letter or as billed periodically, are strictly in respect of the professional services rendered by us. These services include, but are not limited to, advisory, representation, compliance, and documentation.</p>
-      <p>Please note that any liaisoning fees, government levies, statutory charges, or any other amounts demanded by any regulatory authority, government department, or statutory body (collectively referred to as "Departmental Fees") are not included in our professional fees.</p>
-      <p>Such Departmental Fees shall be borne entirely by you. Whenever any such demand is raised by the concerned department or authority, you will be required to make the payment separately, either directly to the department or through us, as per the specific demand raised. Our office will promptly inform you of any such demand or levy, and the same shall be payable in addition to our professional fees.</p>
-      <p>We request you to kindly take note of the above and acknowledge the same for your records and future reference.</p>
+        <h3 style="font-size:15px;text-decoration:underline;">4. DEPARTMENTAL FEES & LIAISONING</h3>
+        <p>This is to bring to your kind attention that our professional fees, as agreed upon in our engagement letter or as billed periodically, are strictly in respect of the professional services rendered by us. These services include, but are not limited to, advisory, representation, compliance, and documentation.</p>
+        <p>Please note that any liaisoning fees, government levies, statutory charges, or any other amounts demanded by any regulatory authority, government department, or statutory body (collectively referred to as "Departmental Fees") are not included in our professional fees.</p>
+        <p>Such Departmental Fees shall be borne entirely by you. Whenever any such demand is raised by the concerned department or authority, you will be required to make the payment separately, either directly to the department or through us, as per the specific demand raised. Our office will promptly inform you of any such demand or levy, and the same shall be payable in addition to our professional fees.</p>
+        <p>We request you to kindly take note of the above and acknowledge the same for your records and future reference.</p>
 
-      <h3 style="font-size:15px;text-decoration:underline;">5. RESPONSIBILITIES OF THE CLIENT</h3>
-      <ul><li>Provide all necessary documents and information in a timely manner</li><li>Ensure accuracy and completeness of information provided</li><li>Make payments as per agreed terms</li></ul>
+        <h3 style="font-size:15px;text-decoration:underline;">5. RESPONSIBILITIES OF THE CLIENT</h3>
+        <ul><li>Provide all necessary documents and information in a timely manner</li><li>Ensure accuracy and completeness of information provided</li><li>Make payments as per agreed terms</li></ul>
 
-      <h3 style="font-size:15px;text-decoration:underline;">6. CONFIDENTIALITY</h3>
-      <p>Both parties agree to maintain strict confidentiality of all information shared during the course of this engagement.</p>
+        <h3 style="font-size:15px;text-decoration:underline;">6. CONFIDENTIALITY</h3>
+        <p>Both parties agree to maintain strict confidentiality of all information shared during the course of this engagement.</p>
 
-      <h3 style="font-size:15px;text-decoration:underline;">7. JURISDICTION</h3>
-      <p>Any dispute arising out of this agreement shall be subject to the exclusive jurisdiction of courts at Jaipur, Rajasthan.</p>
+        <h3 style="font-size:15px;text-decoration:underline;">7. JURISDICTION</h3>
+        <p>Any dispute arising out of this agreement shall be subject to the exclusive jurisdiction of courts at Jaipur, Rajasthan.</p>
 
-      <div style="margin-top:40px;">
-        <div style="display:flex;justify-content:space-between;">
-          <div style="width:45%;">
-            <p><strong>For ${FIRM.name}</strong></p>
-            <br><br>
-            <p style="border-top:1px solid #333;padding-top:4px;">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
-          </div>
-          <div style="width:45%;">
-            <p><strong>For ${c?.clientName||'[Client Name]'}</strong></p>
-            <br><br>
-            <p style="border-top:1px solid #333;padding-top:4px;">${document.getElementById('agPerson').value||'[Authorized Person]'}<br>${document.getElementById('agDesig').value||'[Designation]'}</p>
+        <div style="margin-top:40px;">
+          <div style="display:flex;justify-content:space-between;">
+            <div style="width:45%;">
+              <p><strong>For ${FIRM.name}</strong></p>
+              <br><br>
+              <p style="border-top:1px solid #333;padding-top:4px;">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
+            </div>
+            <div style="width:45%; text-align:right;">
+              <p><strong>For ${c?.clientName||'[Client Name]'}</strong></p>
+              <br><br>
+              <p style="border-top:1px solid #333;padding-top:4px;display:inline-block;">${document.getElementById('agPerson').value||'[Authorized Person]'}<br>${document.getElementById('agDesig').value||'[Designation]'}</p>
+            </div>
           </div>
         </div>
       </div>
     `;
-  } else {
+    
+    if (window.tinymce) {
+      tinymce.init({
+        selector: '#editor-doc',
+        inline: true, menubar: false, plugins: 'lists link table',
+        toolbar: 'bold italic underline | bullist numlist | alignleft aligncenter alignright | table'
+      });
+    }
+  } else if (type === 'noc') {
     // NOC
+    if(window.tinymce && tinymce.get('editor-doc')) { tinymce.remove('#editor-doc'); }
+    
     pa.innerHTML = `
-      <div style="text-align:center;margin-bottom:24px;">
-        <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
-        <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin}</p>
-      </div>
-      <h2>NO OBJECTION CERTIFICATE</h2>
-      <p><strong>Date:</strong> ${fmtDate(new Date().toISOString().split('T')[0])}</p>
-      <p><strong>To Whomsoever It May Concern,</strong></p>
-      <p>This is to certify that <strong>${FIRM.name}</strong> has no objection to <strong>${document.getElementById('nocFor').value||'[Person/Entity Name]'}</strong> for the purpose of <strong>${document.getElementById('nocPurpose').value||'[Purpose]'}</strong>.</p>
-      <p>We confirm that all our engagements and dues with <strong>${c?.clientName||'[Client Name]'}</strong>${c?.gstin?' (GSTIN: '+c.gstin+')':''} have been settled satisfactorily to date.</p>
-      <p>This certificate is issued upon the specific request of the above-mentioned party and does not create any liability or obligation on <strong>${FIRM.name}</strong>.</p>
-      <div style="margin-top:40px;text-align:right;">
-        <p><strong>For ${FIRM.name}</strong></p>
-        <br><br>
-        <p style="border-top:1px solid #333;display:inline-block;padding-top:4px;">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
+      <div id="editor-doc" class="checklist-content" style="font-family:'Times New Roman', serif; font-size:14px; line-height:1.6; outline:1px dashed #ccc; padding:10px; border-radius:4px; min-height:100px;">
+        <div style="text-align:center;margin-bottom:24px;">
+          <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
+          <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin}</p>
+          <hr style="border-color:#ccc; margin:15px 0;">
+        </div>
+        <h2 style="text-align:center;text-decoration:underline;margin-bottom:20px;">NO OBJECTION CERTIFICATE</h2>
+        <p><strong>Date:</strong> ${fmtDate(new Date().toISOString().split('T')[0])}</p>
+        <p><strong>To Whomsoever It May Concern,</strong></p>
+        <p>This is to certify that <strong>${FIRM.name}</strong> has no objection to <strong>${document.getElementById('nocFor').value||'[Person/Entity Name]'}</strong> for the purpose of <strong>${document.getElementById('nocPurpose').value||'[Purpose]'}</strong>.</p>
+        <p>We confirm that all our engagements and dues with <strong>${c?.clientName||'[Client Name]'}</strong>${c?.gstin?' (GSTIN: '+c.gstin+')':''} have been settled satisfactorily to date.</p>
+        <p>This certificate is issued upon the specific request of the above-mentioned party and does not create any liability or obligation on <strong>${FIRM.name}</strong>.</p>
+        <div style="margin-top:40px;text-align:right;">
+          <p><strong>For ${FIRM.name}</strong></p>
+          <br><br>
+          <p style="border-top:1px solid #333;display:inline-block;padding-top:4px;">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
+        </div>
       </div>
     `;
+    
+    if (window.tinymce) {
+      tinymce.init({
+        selector: '#editor-doc',
+        inline: true, menubar: false, plugins: 'lists link table',
+        toolbar: 'bold italic underline | bullist numlist | alignleft aligncenter alignright | table'
+      });
+    }
+  } else if (type.startsWith('checklist_')) {
+    const idx = parseInt(type.split('_')[1]);
+    const chk = apfChecklists[idx];
+    if (chk) {
+      if (window.currentChecklistIdx === idx && pa.querySelector('.checklist-wrapper')) {
+          if(document.getElementById('chkCname')) document.getElementById('chkCname').innerText = c?.clientName||'[Client Name]';
+          if(document.getElementById('chkCaddr')) document.getElementById('chkCaddr').innerText = document.getElementById('agClientAddress').value || '[Address]';
+          if(document.getElementById('chkCgst')) document.getElementById('chkCgst').innerText = 'GSTIN/PAN: ' + (document.getElementById('agClientGstin').value || 'N/A');
+          if(document.getElementById('chkDate')) document.getElementById('chkDate').innerHTML = '<strong>Date:</strong> ' + fmtDate(document.getElementById('agStart').value);
+          if(document.getElementById('chkSign')) document.getElementById('chkSign').innerHTML = 'Authorized Signatory<br>' + (document.getElementById('agTeam').value||'[Team Member]');
+      } else {
+          if(window.tinymce && tinymce.get('editor-'+idx)) { tinymce.remove('#editor-'+idx); }
+          window.currentChecklistIdx = idx;
+          pa.innerHTML = `
+            <div class="checklist-wrapper">
+                <div style="text-align:center;margin-bottom:24px;">
+                  <h3 style="margin:0;font-weight:700;">${FIRM.name}</h3>
+                  <p style="font-size:12px;margin:4px 0;color:#555">${FIRM.address}<br>GSTIN: ${FIRM.gstin} | Email: ${FIRM.email}</p>
+                  <hr style="border-color:#ccc; margin:15px 0;">
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 20px;">
+                    <div>
+                      <p style="margin:0"><strong>To,</strong></p>
+                      <p style="margin:0"><strong id="chkCname">${c?.clientName||'[Client Name]'}</strong></p>
+                      <p style="margin:0" id="chkCaddr">${document.getElementById('agClientAddress').value || '[Address]'}</p>
+                      <p style="margin:0" id="chkCgst">GSTIN/PAN: ${document.getElementById('agClientGstin').value || 'N/A'}</p>
+                    </div>
+                    <div style="text-align:right;">
+                      <p style="margin:0" id="chkDate"><strong>Date:</strong> ${fmtDate(document.getElementById('agStart').value)}</p>
+                    </div>
+                </div>
+                <h4 style="text-align:center;text-decoration:underline;margin-bottom:20px;">${chk.title}</h4>
+                <div id="editor-${idx}" class="checklist-content" style="font-family:'Times New Roman', serif; font-size:14px; line-height:1.6; outline:1px dashed #ccc; padding:10px; border-radius:4px; min-height:100px;">
+                    ${chk.content}
+                </div>
+                <div style="margin-top:50px;">
+                  <p><strong>For ${FIRM.name}</strong></p>
+                  <br><br>
+                  <p style="border-top:1px solid #333;display:inline-block;padding-top:4px;" id="chkSign">Authorized Signatory<br>${document.getElementById('agTeam').value||'[Team Member]'}</p>
+                </div>
+            </div>
+          `;
+          
+          if (window.tinymce) {
+              tinymce.init({
+                  selector: '#editor-'+idx,
+                  inline: true,
+                  menubar: false,
+                  plugins: 'lists link table',
+                  toolbar: 'bold italic underline | bullist numlist | alignleft aligncenter alignright | table',
+                  setup: function(ed) {
+                      ed.on('Change KeyUp', function() {
+                          apfChecklists[idx].content = ed.getContent();
+                      });
+                  }
+              });
+          }
+      }
+    }
   }
 }
 
@@ -356,119 +516,44 @@ function numberToWords(num) {
 }
 
 function downloadAgreementPDF(action = 'download') {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p','mm','a4');
   const type = document.getElementById('docType').value;
   const c = selectedClient || {};
-  const m = 20; let y = 25;
-
-  // Header
-  doc.setFont('times','bold'); doc.setFontSize(16);
-  doc.text(FIRM.name, 105, y, {align:'center'});
-  doc.setFont('times','normal'); doc.setFontSize(9);
-  y += 6; doc.text(FIRM.address, 105, y, {align:'center'});
-  y += 4; doc.text('GSTIN: '+FIRM.gstin+' | Email: '+FIRM.email, 105, y, {align:'center'});
-
-  y += 10; doc.setDrawColor(0); doc.line(m, y, 210-m, y);
-
-  if (type === 'agreement') {
-    y += 10; doc.setFont('times','bold'); doc.setFontSize(14);
-    doc.text('ENGAGEMENT LETTER / AGREEMENT', 105, y, {align:'center'});
-    doc.setFont('times','normal'); doc.setFontSize(11);
-
-    y += 10; doc.text('Date: '+fmtDate(document.getElementById('agStart').value), m, y);
-    y += 8; doc.text('To,', m, y);
-    y += 6; doc.setFont('times','bold'); doc.text(c.clientName||'[Client]', m, y);
-    doc.setFont('times','normal');
-    y += 5; doc.text(document.getElementById('agClientAddress').value || '[Address]', m, y);
-    y += 5; doc.text('GSTIN/PAN: '+(document.getElementById('agClientGstin').value || 'N/A'), m, y);
-    y += 5; doc.text('Attn: '+(document.getElementById('agPerson').value||'—')+', '+(document.getElementById('agDesig').value||''), m, y);
-
-    y += 10; doc.text('Dear Sir/Madam,', m, y);
-    y += 6;
-    const intro = doc.splitTextToSize('We are pleased to confirm our engagement as your Chartered Accountants and Professional Consultants. This letter sets out the terms under which '+FIRM.name+' shall provide professional services.', 170);
-    doc.text(intro, m, y); y += intro.length*5;
-
-    y += 6; doc.setFont('times','bold'); doc.text('1. SCOPE OF WORK', m, y);
-    doc.setFont('times','normal'); y += 6;
-    const scopes = getScopes();
-    scopes.forEach((s,i) => { doc.text((i+1)+'. '+s, m+5, y); y += 5; if(y>270){doc.addPage();y=20;} });
-
-    y += 4; doc.setFont('times','bold'); doc.text('2. TERM', m, y);
-    doc.setFont('times','normal'); y += 6;
-    const term = doc.splitTextToSize('This engagement shall commence from '+fmtDate(document.getElementById('agStart').value)+' and continue until '+fmtDate(document.getElementById('agEnd').value)+'.', 170);
-    doc.text(term, m, y); y += term.length*5;
-
-    y += 6; doc.setFont('times','bold'); doc.text('3. PROFESSIONAL FEES', m, y);
-    doc.setFont('times','normal'); y += 6;
-    doc.text('The professional fees for the above scope of services shall be as follows, exclusive of GST:', m, y);
-    y += 6;
-    const feeArr = getFees();
-    if(feeArr.length===0){
-        doc.text('[Please add fee details]', m+5, y); y += 6;
-    }else{
-        feeArr.forEach(f => {
-           let amtStr = f.type === 'percent' ? `${f.value}%` : `Rs. ${Number(f.value||0).toLocaleString('en-IN')}/-`;
-           doc.text(`- ${f.particular}: ${amtStr}`, m+5, y);
-           y += 5; if(y>270){doc.addPage();y=20;}
-        });
-        y += 1;
-    }
-
-    y += 8; if(y>270){doc.addPage();y=20;}
-    doc.setFont('times','bold'); doc.text('4. DEPARTMENTAL FEES & LIAISONING', m, y);
-    doc.setFont('times','normal'); y += 6;
-    const clauseLines = [
-        "This is to bring to your kind attention that our professional fees, as agreed upon in our engagement letter or as billed periodically, are strictly in respect of the professional services rendered by us. These services include, but are not limited to, advisory, representation, compliance, and documentation.",
-        "Please note that any liaisoning fees, government levies, statutory charges, or any other amounts demanded by any regulatory authority, government department, or statutory body (collectively referred to as \"Departmental Fees\") are not included in our professional fees.",
-        "Such Departmental Fees shall be borne entirely by you. Whenever any such demand is raised by the concerned department or authority, you will be required to make the payment separately, either directly to the department or through us, as per the specific demand raised. Our office will promptly inform you of any such demand or levy, and the same shall be payable in addition to our professional fees.",
-        "We request you to kindly take note of the above and acknowledge the same for your records and future reference."
-    ];
-    clauseLines.forEach(para => {
-        const splitPara = doc.splitTextToSize(para, 170);
-        if (y + splitPara.length*5 > 280) { doc.addPage(); y = 20; }
-        doc.text(splitPara, m, y);
-        y += splitPara.length*5 + 4;
-    });
-
-    if (y > 240) { doc.addPage(); y = 20; }
-    y += 12;
-    doc.setFont('times','bold');
-    doc.text('For '+FIRM.name, m, y);
-    doc.text('For '+(c.clientName||'[Client]'), 120, y);
-    y += 20;
-    doc.line(m, y, m+60, y); doc.line(120, y, 190, y);
-    y += 5; doc.setFont('times','normal');
-    doc.text('Authorized Signatory', m, y); doc.text(document.getElementById('agPerson').value||'Authorized Signatory', 120, y);
-    y += 5; doc.text(document.getElementById('agTeam').value||'', m, y); doc.text(document.getElementById('agDesig').value||'', 120, y);
+  const fname = type==='agreement' ? 'Agreement' : (type.startsWith('checklist_') ? 'Checklist' : 'NOC');
+  
+  const opt = {
+      margin: 10,
+      filename: `${fname}_${(c.clientName||'draft').replace(/\s+/g,'_')}_${Date.now()}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+  
+  let htmlContent = '';
+  if (type.startsWith('checklist_')) {
+      htmlContent = document.querySelector('.checklist-wrapper').innerHTML;
   } else {
-    // NOC
-    y += 10; doc.setFont('times','bold'); doc.setFontSize(14);
-    doc.text('NO OBJECTION CERTIFICATE', 105, y, {align:'center'});
-    doc.setFont('times','normal'); doc.setFontSize(11);
-    y += 10; doc.text('Date: '+fmtDate(new Date().toISOString().split('T')[0]), m, y);
-    y += 8; doc.text('To Whomsoever It May Concern,', m, y);
-    y += 8;
-    const body = doc.splitTextToSize('This is to certify that '+FIRM.name+' has no objection to '+(document.getElementById('nocFor').value||'[Person]')+' for the purpose of '+(document.getElementById('nocPurpose').value||'[Purpose]')+'.', 170);
-    doc.text(body, m, y); y += body.length*5+4;
-    const body2 = doc.splitTextToSize('We confirm that all engagements and dues with '+(c.clientName||'[Client]')+' have been settled satisfactorily.', 170);
-    doc.text(body2, m, y); y += body2.length*5;
-    y += 20; doc.setFont('times','bold');
-    doc.text('For '+FIRM.name, 120, y);
-    y += 20; doc.line(120, y, 190, y);
-    y += 5; doc.setFont('times','normal');
-    doc.text('Authorized Signatory', 120, y);
+      if (window.tinymce && tinymce.get('editor-doc')) {
+          htmlContent = tinymce.get('editor-doc').getContent();
+      } else {
+          htmlContent = document.getElementById('editor-doc') ? document.getElementById('editor-doc').innerHTML : document.getElementById('previewArea').innerHTML;
+      }
   }
 
-  const fname = type==='agreement' ? 'Agreement' : 'NOC';
+  const printDiv = document.createElement('div');
+  printDiv.innerHTML = `<div style="font-family:'Times New Roman',serif; font-size:14px; color:#000;">${htmlContent}</div>`;
   
   if (action === 'preview') {
-    window.open(doc.output('bloburl'), '_blank');
+      html2pdf().set(opt).from(printDiv).outputPdf('blob').then(blob => {
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+      });
   } else {
-    doc.save(`${fname}_${(c.clientName||'draft').replace(/\s+/g,'_')}_${Date.now()}.pdf`);
-    Swal.fire({title:'PDF Downloaded!',icon:'success',timer:1500,showConfirmButton:false});
+      html2pdf().set(opt).from(printDiv).save().then(() => {
+          Swal.fire({title:'PDF Downloaded!',icon:'success',timer:1500,showConfirmButton:false});
+      });
   }
 }
 </script>
+<script src="sidebar.js"></script>
 </body>
 </html>

@@ -121,27 +121,19 @@ async function loadEmpTodayStatus() {
         const statusEl = document.getElementById('emp-today-status');
         const btnIn = document.getElementById('btn-emp-checkin');
         const btnOut = document.getElementById('btn-emp-checkout');
-        const btnWebIn = document.getElementById('btn-emp-web-checkin');
-        const btnWebOut = document.getElementById('btn-emp-web-checkout');
 
         if (todayIn && todayOut) {
             statusEl.innerHTML = `<span class="badge badge-out">Checked Out</span> In: ${todayIn.time} | Out: ${todayOut.time} | ${todayOut.status}`;
             if(btnIn) btnIn.disabled = true;
             if(btnOut) btnOut.disabled = true;
-            if(btnWebIn) btnWebIn.disabled = true;
-            if(btnWebOut) btnWebOut.disabled = true;
         } else if (todayIn) {
             statusEl.innerHTML = `<span class="badge badge-in">Checked In</span> at ${todayIn.time} — <span class="badge ${todayIn.status === 'LATE' ? 'badge-late' : 'badge-ontime'}">${todayIn.status}</span>`;
             if(btnIn) btnIn.disabled = true;
             if(btnOut) btnOut.disabled = false;
-            if(btnWebIn) btnWebIn.disabled = true;
-            if(btnWebOut) btnWebOut.disabled = false;
         } else {
             statusEl.innerHTML = `<span class="badge badge-absent">Not Checked In</span>`;
             if(btnIn) btnIn.disabled = false;
             if(btnOut) btnOut.disabled = true;
-            if(btnWebIn) btnWebIn.disabled = false;
-            if(btnWebOut) btnWebOut.disabled = true;
         }
     } catch (err) {
         console.error(err);
@@ -260,47 +252,6 @@ async function empCaptureAndMark(type) {
     }
 }
 
-// Web manual fallback
-async function empWebCheckMark(type) {
-    const endpoint = type === 'IN' ? '/api/attendance/checkin' : '/api/attendance/checkout';
-    const btnId = type === 'IN' ? 'btn-emp-web-checkin' : 'btn-emp-web-checkout';
-    const btn = document.getElementById(btnId);
-    if(btn) { btn.disabled = true; btn.textContent = '⏳ Processing...'; }
-
-    try {
-        let ipInfo = null;
-        try {
-            const resp = await fetch('https://ipapi.co/json/');
-            ipInfo = await resp.json();
-        } catch(e) {}
-
-        const locString = ipInfo ? `${ipInfo.city}, ${ipInfo.region}, ${ipInfo.country_name}` : 'Web Dashboard / Manual Entry';
-        
-        const data = await api('POST', endpoint, {
-            location: locString,
-            coords: null,
-            ip: ipInfo ? ipInfo.ip : null,
-            mapUrl: null,
-            snapshot: '' 
-        });
-        
-        if (type === 'IN') {
-            const statusMsg = data.status === 'LATE' ? '⚠️ LATE' : '✅ ON TIME';
-            toast(`Web Check-In marked! ${statusMsg}`, data.status === 'LATE' ? 'warning' : 'success');
-        } else {
-            toast(`Web Check-Out marked! Working: ${data.workingHours}`, 'success');
-        }
-        setTimeout(() => { initEmpDashboard(); }, 1500);
-    } catch (err) {
-        toast('❌ ' + err.message, 'error');
-    } finally {
-        if(btn) {
-            btn.disabled = false;
-            btn.innerHTML = type === 'IN' ? '🌐 Web Check-In' : '🌐 Web Check-Out';
-        }
-    }
-}
-
 // ============ CAMERA ============
 async function startCamera(videoId) {
     const video = document.getElementById(videoId);
@@ -309,10 +260,58 @@ async function startCamera(videoId) {
     video.style.display = 'block';
     if (preview) preview.style.display = 'none';
     try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+        // Try front camera first
+        cameraStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false 
+        });
         video.srcObject = cameraStream;
+        await video.play();
     } catch (err) {
-        toast('Camera access denied.', 'error');
+        console.error('Camera error:', err.name, err.message);
+        let msg = '📷 Camera access denied. ';
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            msg += 'Please allow camera permission in your browser settings. Go to Settings → Site Settings → Camera → Allow for this site.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            msg += 'No camera found on your device. Please use Web Check-In button instead.';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            msg += 'Camera is being used by another app. Please close other camera apps and retry.';
+        } else if (err.name === 'OverconstrainedError') {
+            // Try again without constraints
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = cameraStream;
+                await video.play();
+                return; // Success on retry
+            } catch(_) {
+                msg += 'Camera not compatible. Please use Web Check-In button instead.';
+            }
+        } else if (err.name === 'AbortError') {
+            msg += 'Camera was interrupted. Please try again.';
+        } else {
+            msg += 'Unknown error: ' + err.message + '. Try Web Check-In instead.';
+        }
+        toast(msg, 'error', 6000);
+        
+        // Show a helpful overlay on the camera area
+        const container = video.parentElement;
+        if (container) {
+            video.style.display = 'none';
+            let helpDiv = container.querySelector('.camera-help-overlay');
+            if (!helpDiv) {
+                helpDiv = document.createElement('div');
+                helpDiv.className = 'camera-help-overlay';
+                helpDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;background:#1E293B;border-radius:12px;min-height:200px;';
+                container.appendChild(helpDiv);
+            }
+            helpDiv.innerHTML = `
+                <div style="font-size:3rem;margin-bottom:12px;">📷❌</div>
+                <p style="color:#F87171;font-weight:600;margin:0 0 8px 0;">Camera Permission Required</p>
+                <p style="color:#94A3B8;font-size:0.8rem;line-height:1.5;margin:0 0 12px 0;">Allow camera access in your phone/browser settings, or use the <strong style="color:#38BDF8;">Web Check-In</strong> button from your dashboard.</p>
+                <a href="camera-guide.html" target="_blank" style="color:#38BDF8;font-size:0.8rem;text-decoration:underline;">📖 View Camera Permission Guide</a>
+                <button class="btn btn-ghost" onclick="showScreen('screen-emp-dashboard')" style="margin-top:12px;">← Back to Dashboard</button>
+            `;
+        }
     }
 }
 
@@ -380,6 +379,53 @@ function fetchLocation(badgeId) {
     fetch('https://ipapi.co/json/').then(r => r.json()).then(d => { currentIP = d.ip || null; }).catch(() => {});
 }
 
+// ============ WEB CHECK-IN/OUT (No Camera Fallback) ============
+async function empWebCheckMark(type) {
+    if (!currentUser) { toast('Please log in first', 'warning'); return; }
+    
+    const confirmMsg = type === 'IN' 
+        ? '🌐 Web Check-In: Your attendance will be marked without a photo. Your IP address will be logged for audit. Proceed?'
+        : '🌐 Web Check-Out: Your checkout will be marked without a photo. Your IP address will be logged for audit. Proceed?';
+    
+    if (!confirm(confirmMsg)) return;
+    
+    // Fetch IP-based location as fallback
+    let webLocation = 'Web Check-In (No GPS)';
+    let webCoords = null;
+    let webIP = null;
+    
+    try {
+        const ipRes = await fetch('https://ipapi.co/json/');
+        const ipData = await ipRes.json();
+        webIP = ipData.ip || null;
+        webLocation = `Web: ${ipData.city || 'Unknown'}, ${ipData.region || ''}, ${ipData.country_name || ''}`;
+        if (ipData.latitude && ipData.longitude) {
+            webCoords = { lat: ipData.latitude, lng: ipData.longitude };
+        }
+    } catch(e) { console.warn('IP fetch failed:', e); }
+    
+    const endpoint = type === 'IN' ? '/api/attendance/checkin' : '/api/attendance/checkout';
+    try {
+        const data = await api('POST', endpoint, {
+            location: webLocation,
+            coords: webCoords,
+            ip: webIP,
+            mapUrl: webCoords ? `https://www.google.com/maps?q=${webCoords.lat},${webCoords.lng}` : null,
+            snapshot: null  // No photo for web check-in
+        });
+        if (type === 'IN') {
+            const statusMsg = data.status === 'LATE' ? '⚠️ LATE' : '✅ ON TIME';
+            toast(`🌐 Web Check-In successful! ${statusMsg}`, data.status === 'LATE' ? 'warning' : 'success');
+        } else {
+            toast(`🌐 Web Check-Out successful! Working: ${data.workingHours}`, 'success');
+        }
+        loadEmpTodayStatus();
+        loadEmpRecentLogs();
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    }
+}
+
 // ============ ADMIN AUTH ============
 async function adminLogin() {
     const email = document.getElementById('admin-email').value.trim();
@@ -392,6 +438,9 @@ async function adminLogin() {
         currentUser = { ...data.admin, type: 'admin' };
         localStorage.setItem('sa_token', authToken);
         localStorage.setItem('sa_user', JSON.stringify(currentUser));
+        
+        if (window.initGlobalSidebar) window.initGlobalSidebar();
+        
         toast('Welcome, ' + currentUser.name, 'success');
         document.getElementById('admin-email').value = '';
         document.getElementById('admin-pass').value = '';
@@ -404,10 +453,15 @@ async function adminLogin() {
 // ============ ADMIN PORTAL ============
 function initAdminPortal() {
     if (!currentUser || currentUser.type !== 'admin') { showScreen('screen-main'); return; }
-    document.getElementById('admin-welcome-name').textContent = currentUser.name;
-    document.getElementById('admin-role-badge').textContent = currentUser.role;
+    
+    const nameEl = document.getElementById('admin-welcome-name');
+    if (nameEl) nameEl.textContent = currentUser.name;
+    
+    const badgeEl = document.getElementById('admin-role-badge');
+    if (badgeEl) badgeEl.textContent = currentUser.role;
+    
     // Show/hide superadmin-only tabs
-    const adminTab = document.getElementById('tab-btn-admins');
+    const adminTab = document.getElementById('att-sub-admins') || document.getElementById('tab-btn-admins');
     if (adminTab) adminTab.style.display = currentUser.role === 'superadmin' ? '' : 'none';
     
     // Check URL hash for direct tab navigation
@@ -423,9 +477,11 @@ function initAdminPortal() {
 
 function switchTab(name) {
     document.querySelectorAll('.tab-panel').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.btn-nav').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.btn-nav, .att-sub-btn').forEach(b => b.classList.remove('active'));
+    
     const panel = document.getElementById('tab-' + name);
-    const btn = document.getElementById('tab-btn-' + name);
+    const btn = document.getElementById('tab-btn-' + name) || document.getElementById('att-sub-' + name);
+    
     if (panel) panel.classList.add('active');
     if (btn) btn.classList.add('active');
 

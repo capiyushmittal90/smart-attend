@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | My Daily Routines</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .navbar { background:var(--navy)!important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+    .card { border-radius:14px; border:none; box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    
+    .routine-row { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; transition: all 0.2s; }
+    .routine-row:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    
+    .status-check { width: 32px; height: 32px; border-radius: 50%; border: 2px solid #CBD5E1; color: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+    .status-check:hover { border-color: #3B82F6; }
+    
+    .routine-row.done { background: #F0FDF4; border-color: #86EFAC; }
+    .routine-row.done .status-check { background: #22C55E; border-color: #22C55E; color: #fff; cursor: default; }
+    .routine-row.done .task-title { color: #166534; text-decoration: line-through; opacity: 0.8;}
+    
+    .task-title { font-size: 1.1rem; font-weight: 600; color: #1E293B; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-clipboard-check"></i></div>
+      <span class="fw-bold fs-5">My <span class="text-white-50 fw-light">Daily Routines</span></span>
+    </a>
+    <div>
+        <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-home me-1"></i>Hub</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-5" style="max-width: 800px;">
+  
+  <div class="mb-4 d-flex justify-content-between align-items-end border-bottom pb-3">
+     <div>
+       <h3 class="fw-bold text-navy mb-1"><i class="fa-solid fa-calendar-day text-primary me-2"></i>Today's Checklist</h3>
+       <p class="text-muted mb-0" id="dateStr">Loading date...</p>
+     </div>
+     <div class="text-end" id="progressBox">
+       <!-- calculated via JS -->
+     </div>
+  </div>
+
+  <div id="routinesList">
+     <div class="text-center py-5">
+        <div class="spinner-border text-primary"></div>
+     </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+  let token = localStorage.getItem('sa_token');
+  let todayDate = '';
+
+  // Unified auth-aware fetch helper
+  async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + token;
+    const r = await fetch(url, options);
+    if (r.status === 401 || r.status === 403) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Session Expired',
+        text: 'Your login session has expired. Please log in again.',
+        confirmButtonText: 'Go to Login',
+        allowOutsideClick: false
+      });
+      localStorage.removeItem('sa_token');
+      localStorage.removeItem('sa_user');
+      window.location.href = 'index.html';
+      throw new Error('AUTH_REDIRECT');
+    }
+    return r;
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (!token) { window.location.href = 'index.html'; return; }
+    
+    const opts = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
+    document.getElementById('dateStr').textContent = new Date().toLocaleDateString('en-IN', opts);
+    
+    await loadMyRoutines();
+  });
+
+  async function loadMyRoutines() {
+    try {
+      const r = await authFetch('/api/routines/my-today');
+      const data = await r.json();
+      
+      const cont = document.getElementById('routinesList');
+      cont.innerHTML = '';
+      
+      if(data.isSunday) {
+         cont.innerHTML = `
+         <div class="text-center py-5">
+           <i class="fa-solid fa-mug-hot fs-1 text-warning mb-3"></i>
+           <h4>It's Sunday!</h4>
+           <p class="text-muted">No mandatory daily routines for today. Enjoy your day off.</p>
+         </div>`;
+         return;
+      }
+      
+      if(data.isLeave) {
+         cont.innerHTML = `
+         <div class="text-center py-5">
+           <i class="fa-solid fa-suitcase-rolling fs-1 text-info mb-3"></i>
+           <h4>You are on Leave!</h4>
+           <p class="text-muted">No mandatory routines assigned while you are on approved leave.</p>
+         </div>`;
+         return;
+      }
+
+      todayDate = data.date;
+      const routines = data.routines || [];
+      
+      if(routines.length === 0) {
+          cont.innerHTML = '<div class="alert alert-info border-0 shadow-sm"><i class="fa-solid fa-info-circle me-2"></i>You have no specific daily routines assigned.</div>';
+          document.getElementById('progressBox').innerHTML = '';
+          return;
+      }
+      
+      let completedCount = 0;
+      
+      routines.forEach(rt => {
+         if(rt.completed) completedCount++;
+         
+         if(rt.completed) {
+            cont.innerHTML += `
+            <div class="routine-row done d-flex align-items-center">
+               <div class="status-check"><i class="fa-solid fa-check fs-5"></i></div>
+               <div class="ms-3 flex-grow-1">
+                  <div class="task-title">${rt.title}</div>
+                  <div class="small fw-medium text-success bg-white border border-success px-2 py-1 rounded d-inline-block mt-1">
+                     <i class="fa-solid fa-comment-dots text-success me-1"></i> ${rt.comment}
+                  </div>
+               </div>
+               <div class="text-success fw-bold ms-2">Done</div>
+            </div>`;
+         } else {
+            cont.innerHTML += `
+            <div class="routine-row d-flex align-items-center" onclick="completeRoutine('${rt._id}', '${rt.title}')" style="cursor:pointer">
+               <div class="status-check"><i class="fa-solid fa-check fs-5"></i></div>
+               <div class="ms-3 flex-grow-1">
+                  <div class="task-title">${rt.title}</div>
+                  <div class="small text-danger fw-semibold"><i class="fa-solid fa-circle-exclamation me-1"></i>Pending</div>
+               </div>
+               <div class="btn btn-sm btn-outline-primary ms-2 fw-semibold px-3 text-nowrap rounded-pill">Click to Complete</div>
+            </div>`;
+         }
+      });
+      
+      // Update Progress
+      const pct = Math.round((completedCount / routines.length) * 100);
+      let color = pct === 100 ? 'success' : 'primary';
+      document.getElementById('progressBox').innerHTML = `
+         <h4 class="fw-bold text-${color} mb-0">${pct}%</h4>
+         <span class="small text-muted fw-semibold text-uppercase letter-spacing-1">${completedCount} of ${routines.length} Done</span>
+      `;
+      
+    } catch(e) {
+      if (e.message !== 'AUTH_REDIRECT') document.getElementById('routinesList').innerHTML = '<div class="alert alert-danger">Error connecting to server.</div>';
+    }
+  }
+
+  async function completeRoutine(id, title) {
+    const { value: comment } = await Swal.fire({
+      title: 'Complete Routine Task',
+      html: `You are marking <b>${title}</b> as done.<br><br>Please provide a mandatory status comment:`,
+      input: 'textarea',
+      inputPlaceholder: "e.g., Attendance marked from software at 10:00 AM",
+      showCancelButton: true,
+      confirmButtonText: '<i class="fa-solid fa-check-circle me-1"></i> Mark Done',
+      confirmButtonColor: '#10B981',
+      inputValidator: (val) => {
+        if (!val || val.trim() === '') {
+          return 'Comment is absolutely mandatory!'
+        }
+      }
+    });
+
+    if (comment) {
+       Swal.fire({title:'Saving...', allowOutsideClick:false, didOpen:()=>Swal.showLoading()});
+       try {
+           const r = await authFetch('/api/routines/complete', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+                   routineTaskId: id,
+                   comment: comment,
+                   date: todayDate
+               })
+           });
+           const d = await r.json();
+           if(d.success) {
+               Swal.close();
+               loadMyRoutines();
+           } else {
+               Swal.fire('Error', d.error, 'error');
+           }
+       } catch(e) { if (e.message !== 'AUTH_REDIRECT') Swal.fire('Error', 'Server failure', 'error'); }
+    }
+  }
+
+</script>
+</body>
+</html>

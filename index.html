@@ -123,11 +123,14 @@
                         Check-In</button>
                     <button id="btn-emp-checkout" class="btn btn-accent sidebar-btn" onclick="startEmpCheckout()">🚪
                         Check-Out</button>
-                    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:15px 0;">
-                    <button id="btn-emp-web-checkin" class="btn sidebar-btn" style="background:#4A5568;color:#fff;" onclick="empWebCheckMark('IN')">🌐 Web Check-In</button>
-                    <button id="btn-emp-web-checkout" class="btn sidebar-btn" style="background:#4A5568;color:#fff;margin-top:8px;" onclick="empWebCheckMark('OUT')">🌐 Web Check-Out</button>
+                    <div style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:10px;">
+                        <p style="font-size:0.7rem;color:#94A3B8;margin:0 0 6px 0;">📱 Camera not working?</p>
+                        <button id="btn-web-checkin" class="btn sidebar-btn" style="background:#0EA5E9;color:#fff;font-weight:700;font-size:.8rem;" onclick="empWebCheckMark('IN')">🌐 Web Check-In</button>
+                        <button id="btn-web-checkout" class="btn sidebar-btn" style="background:#F59E0B;color:#0F172A;font-weight:700;font-size:.8rem;margin-top:4px;" onclick="empWebCheckMark('OUT')">🌐 Web Check-Out</button>
+                    </div>
                 </div>
                 <a href="task-portal.html" class="btn sidebar-btn" style="background:#38BDF8;color:#0F172A;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:8px;">📋 My Task Dashboard</a>
+                <a href="routines-staff.html" class="btn sidebar-btn" style="background:#10B981;color:#fff;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:6px;">📅 My Daily Routines</a>
                 <a href="client-master.html" class="btn sidebar-btn" style="background:#6366F1;color:#fff;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:6px;">📇 Client Master</a>
                 <a href="invoice-builder.html" class="btn sidebar-btn" style="background:#2563EB;color:#fff;font-weight:700;text-align:center;text-decoration:none;display:block;margin-top:6px;">🧾 Create Invoice</a>
                 <button class="btn btn-ghost sidebar-back" onclick="logout()">🚪 Logout</button>
@@ -250,30 +253,35 @@
                     <div class="password-wrap"><input type="password" id="admin-pass" class="form-input" placeholder="Password"><button type="button" class="eye-btn" onclick="togglePwd('admin-pass', this)">👁️</button></div>
                     <button type="submit" class="btn btn-primary btn-lg">Sign In</button>
                 </form>
+                <a href="#" onclick="showForgotPassword(); return false;" style="display:block;margin-top:12px;color:#38BDF8;font-size:.85rem;text-decoration:none;font-weight:600;">🔑 Forgot Password? (Super Admin Only)</a>
                 <button class="btn btn-ghost" onclick="showScreen('screen-main')">← Cancel</button>
+            </div>
+
+            <!-- Forgot Password Flow (hidden by default) -->
+            <div id="forgotPwdBox" class="gate-card glass narrow" style="display:none;margin-top:20px;max-width:420px;">
+                <h2 style="font-size:1.3rem;margin-bottom:6px;">🔑 Reset Password</h2>
+                <p class="subtitle" style="font-size:.78rem;">Only for Super Admin. Enter your registered email.</p>
+                <!-- Step 1: Send OTP -->
+                <div id="fpStep1">
+                    <input type="email" id="fp-email" class="form-input" placeholder="Super Admin Email" style="margin-bottom:10px;">
+                    <button class="btn btn-primary btn-lg" onclick="sendForgotOTP()" id="fpSendBtn">📩 Send OTP</button>
+                </div>
+                <!-- Step 2: Enter OTP + New Password -->
+                <div id="fpStep2" style="display:none;">
+                    <p style="color:#38BDF8;font-size:.82rem;margin-bottom:8px;">✅ OTP sent! Check your email.</p>
+                    <input type="text" id="fp-otp" class="form-input" placeholder="Enter 6-digit OTP" maxlength="6" style="margin-bottom:8px;letter-spacing:4px;text-align:center;font-size:1.2rem;">
+                    <div class="password-wrap"><input type="password" id="fp-newpass" class="form-input" placeholder="New Password"><button type="button" class="eye-btn" onclick="togglePwd('fp-newpass', this)">👁️</button></div>
+                    <button class="btn btn-primary btn-lg" onclick="resetPassword()" id="fpResetBtn" style="margin-top:8px;">🔓 Reset Password</button>
+                </div>
+                <button class="btn btn-ghost" onclick="document.getElementById('forgotPwdBox').style.display='none';" style="margin-top:8px;">← Back</button>
             </div>
         </div>
     </section>
 
-    <!-- ============ SCREEN: ADMIN PORTAL ============ -->
+    <!-- ============ SCREEN: ADMIN DASHBOARD ============ -->
     <section id="screen-admin-portal" class="screen">
         <div class="layout-split">
-            <aside class="sidebar">
-                <div class="sidebar-brand">
-                    <span class="sidebar-icon">🏢</span>
-                    <h2>Bookmyca<br><span class="gold">Suite</span></h2>
-                </div>
-                <p class="admin-greeting">Welcome, <strong id="admin-welcome-name">Admin</strong>
-                    <span class="badge badge-role" id="admin-role-badge">admin</span>
-                </p>
-                <nav class="sidebar-nav">
-                    <button class="btn btn-nav" id="tab-btn-dashboard" onclick="switchTab('dashboard')">🏠 Home</button>
-                    <button class="btn btn-nav" id="tab-btn-settings" onclick="switchTab('settings')">⚙️ Office Setup</button>
-                    <button class="btn btn-nav" id="tab-btn-admins" onclick="switchTab('admins')">🔑 Manage Admins</button>
-                </nav>
-                <button class="btn btn-ghost sidebar-back" onclick="logout()">🚪 Logout</button>
-            </aside>
-
+            <!-- Sidebar is now managed globally by sidebar.js -->
             <main class="content-area">
 
                 <!-- ======== TAB: DASHBOARD (MODULE HUB) ======== -->
@@ -366,6 +374,33 @@
                             <div class="mc-arrow">→</div>
                         </a>
 
+                        <!-- Card 7: Template Master (Admin Only) -->
+                        <a href="template-master.html" class="module-card mc-admin admin-only-card" style="background: linear-gradient(135deg, #1e293b, #0f172a); color:white;">
+                            <div class="mc-icon-ring" style="background: rgba(255,255,255,0.1); color: #38bdf8;"><span>⚙️</span></div>
+                            <div class="mc-info">
+                                <h3 style="color:white;">Template Master</h3>
+                                <p style="color:#cbd5e1;">Manage Checklists, Forms & Templates</p>
+                            </div>
+                            <div class="mc-arrow" style="color:#38bdf8;">→</div>
+                        </a>
+
+                        <a href="ad-master.html" class="module-card mc-admin admin-only-card" style="background: linear-gradient(135deg, #4f46e5, #312e81); color:white;">
+                            <div class="mc-icon-ring" style="background: rgba(255,255,255,0.1); color: #818cf8;"><span>🎯</span></div>
+                            <div class="mc-info">
+                                <h3 style="color:white;">Ad Master</h3>
+                                <p style="color:#c7d2fe;">Customer Portal Banners</p>
+                            </div>
+                            <div class="mc-arrow" style="color:#818cf8;">→</div>
+                        </a>
+
+                        <a href="routines-admin.html" class="module-card mc-admin admin-only-card" style="background: linear-gradient(135deg, #059669, #064e3b); color:white;">
+                            <div class="mc-icon-ring" style="background: rgba(255,255,255,0.1); color: #34d399;"><span>📆</span></div>
+                            <div class="mc-info">
+                                <h3 style="color:white;">Daily Routines Master</h3>
+                                <p style="color:#a7f3d0;">Manage mandatory routines & monitor staff</p>
+                            </div>
+                            <div class="mc-arrow" style="color:#34d399;">→</div>
+                        </a>
 
                     </div>
                 </div>
@@ -382,6 +417,8 @@
                         <button class="att-sub-btn" id="att-sub-staff" onclick="switchAttSub('staff')">👥 Manage Staff</button>
                         <button class="att-sub-btn" id="att-sub-reports" onclick="switchAttSub('reports')">📋 Att. Reports</button>
                         <button class="att-sub-btn" id="att-sub-leaves" onclick="switchAttSub('leaves')">📝 Leave Requests</button>
+                        <button class="att-sub-btn" id="att-sub-settings" onclick="switchTab('settings')">⚙️ Office Setup</button>
+                        <button class="att-sub-btn" id="att-sub-admins" onclick="switchTab('admins')">🔑 Manage Admins</button>
                     </div>
 
                     <!-- Sub: Overview -->
@@ -652,7 +689,10 @@
 
                 <!-- ======== TAB: SETTINGS ======== -->
                 <div id="tab-settings" class="tab-panel">
-                    <h2 class="page-title">⏰ Office Settings</h2>
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('attendance')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Smart Attend</button>
+                        <h2 class="page-title" style="margin:0;">⏰ Office Settings</h2>
+                    </div>
                     <div class="form-card glass settings-card">
                         <div class="form-grid">
                             <div class="form-group">
@@ -688,13 +728,13 @@
                     </div>
 
                     <!-- Holiday Calendar Management -->
-                    <div class="form-card glass" style="margin-top: 20px;">
+                    <div class="form-card glass" style="margin-top: 20px; max-width: 800px;">
                         <h3>📅 Yearly Holiday Calendar</h3>
                         <p style="font-size:12px;color:#666;margin-top:0;">These days will be fully paid when generating salary.</p>
-                        <div style="display:flex; gap:10px; margin-bottom: 12px;">
-                            <input type="date" id="holiday-date" class="form-input" style="flex:1;">
-                            <input type="text" id="holiday-name" class="form-input" placeholder="e.g. Diwali" style="flex:2;">
-                            <button class="btn btn-primary" onclick="addHoliday()">+ Add</button>
+                        <div style="display:grid; grid-template-columns: 1fr 2fr min-content; gap:10px; margin-bottom: 12px;">
+                            <input type="date" id="holiday-date" class="form-input" style="width:100%;">
+                            <input type="text" id="holiday-name" class="form-input" placeholder="e.g. Diwali" style="width:100%;">
+                            <button class="btn btn-primary" onclick="addHoliday()" style="white-space:nowrap;">+ Add</button>
                         </div>
                         <div id="holidays-list" style="display:grid; gap:8px;"></div>
                     </div>
@@ -704,7 +744,10 @@
 
                 <!-- ======== TAB: MANAGE ADMINS ======== -->
                 <div id="tab-admins" class="tab-panel">
-                    <h2 class="page-title">🔑 Manage Admins</h2>
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('attendance')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Smart Attend</button>
+                        <h2 class="page-title" style="margin:0;">🔑 Manage Admins</h2>
+                    </div>
                     <div class="form-card glass">
                         <h3>Add New Admin</h3>
                         <form id="admin-form" onsubmit="return addAdmin(event)">
@@ -782,6 +825,7 @@
         </div>
     </div>
 
+    <script src="sidebar.js"></script>
     <script src="app.js"></script>
     <script>
         if ('serviceWorker' in navigator) {

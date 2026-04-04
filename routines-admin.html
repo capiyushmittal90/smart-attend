@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | Daily Routines Master</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .navbar { background:var(--navy)!important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+    .btn-navy { background:var(--navy);color:#fff;border:none; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff; }
+    .card { border-radius:14px; border:none; box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    .staff-list { max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #fff; }
+    .staff-item { padding: 8px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+    .staff-item:hover { background: #f8fafc; }
+    .routine-row { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+    .avatar-sm { width: 32px; height: 32px; border-radius: 50%; background: #E2E8F0; color: #475569; display: inline-flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; margin-right: 8px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-list-check"></i></div>
+      <span class="fw-bold fs-5">Daily Routines <span class="text-white-50 fw-light">Master Hub</span></span>
+    </a>
+    <div>
+        <a href="superadmin-panel.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-arrow-left me-1"></i>Back to Superadmin</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container py-4">
+  <div class="row g-4">
+    <!-- CREATE / EDIT ROUTINE TASK -->
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header bg-white border-bottom py-3">
+          <h5 class="mb-0 fw-bold text-navy"><i class="fa-solid fa-plus-circle me-2"></i>Create Routing Task</h5>
+        </div>
+        <div class="card-body">
+          <form id="routineForm" onsubmit="saveRoutine(event)">
+            <input type="hidden" id="editId">
+            <div class="mb-3">
+              <label class="form-label fw-semibold small text-muted">Task Name / Title <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="f-title" placeholder="e.g. Mark Attendance" required>
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label fw-semibold small text-muted">Assign to Employees</label>
+              <div class="staff-list" id="staffContainer">
+                <div class="text-center text-muted small py-3">Loading staff...</div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+              <button type="button" class="btn btn-light" onclick="resetForm()">Clear</button>
+              <button type="submit" class="btn btn-navy fw-semibold px-4"><i class="fa-solid fa-save me-2"></i>Save Routine</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXISTING ROUTINES -->
+    <div class="col-lg-7">
+      <div class="card h-100">
+        <div class="card-header bg-white border-bottom py-3">
+          <h5 class="mb-0 fw-bold text-navy"><i class="fa-solid fa-layer-group me-2"></i>Active Routines</h5>
+        </div>
+        <div class="card-body bg-light" id="routinesList" style="max-height:500px;overflow-y:auto;">
+           <div class="text-center text-muted small py-3">Loading routines...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY REPORTS -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-navy text-white py-3 d-flex justify-content-between align-items-center" style="background:var(--navy)!important; border-radius:14px 14px 0 0;">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-chart-bar me-2"></i>Daily Compliance Report</h5>
+          <div class="d-flex align-items-center gap-2">
+            <label class="text-white-50 small mb-0 text-nowrap">Select Date:</label>
+            <input type="date" class="form-control form-control-sm" id="reportDate" onchange="loadReport()">
+          </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr>
+                    <th class="text-muted small text-uppercase">Employee</th>
+                    <th class="text-muted small text-uppercase">Assigned Routines</th>
+                  </tr>
+                </thead>
+                <tbody id="reportTbl">
+                  <tr><td colspan="2" class="text-center py-4 text-muted">Select a date to load report.</td></tr>
+                </tbody>
+              </table>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+  let token = localStorage.getItem('sa_token');
+  let allStaff = [];
+  let allRoutines = [];
+
+  // Unified auth-aware fetch helper
+  async function authFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = 'Bearer ' + token;
+    const r = await fetch(url, options);
+    if (r.status === 401 || r.status === 403) {
+      const data = await r.json().catch(() => ({}));
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Session Expired',
+        text: 'Your login session has expired. Please log in again.',
+        confirmButtonText: 'Go to Login',
+        allowOutsideClick: false
+      });
+      localStorage.removeItem('sa_token');
+      localStorage.removeItem('sa_user');
+      window.location.href = 'index.html';
+      throw new Error('AUTH_REDIRECT');
+    }
+    return r;
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (!token) { window.location.href = 'index.html'; return; }
+    
+    // Set today for report
+    document.getElementById('reportDate').valueAsDate = new Date();
+    
+    // Validate token first with a quick test call
+    try {
+      const testR = await fetch('/api/staff', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (testR.status === 401 || testR.status === 403) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Session Expired',
+          text: 'Your login token has expired. Please log in again from the main app.',
+          confirmButtonText: 'Go to Login',
+          allowOutsideClick: false
+        });
+        localStorage.removeItem('sa_token');
+        localStorage.removeItem('sa_user');
+        window.location.href = 'index.html';
+        return;
+      }
+    } catch(e) {
+      console.error('Token validation failed:', e);
+    }
+
+    await loadStaff();
+    await loadRoutines();
+    await loadReport();
+  });
+
+  async function loadStaff() {
+    try {
+      const r = await authFetch('/api/staff');
+      const data = await r.json();
+      allStaff = data || [];
+      renderStaffCheckboxes();
+    } catch(e) { if (e.message !== 'AUTH_REDIRECT') console.error('Staff error:', e); }
+  }
+
+  function renderStaffCheckboxes(assignedIds = []) {
+    const cont = document.getElementById('staffContainer');
+    cont.innerHTML = '';
+    
+    // Select All
+    cont.innerHTML += `
+      <div class="form-check mb-2 pb-2 border-bottom">
+        <input class="form-check-input" type="checkbox" id="selectAllStaff" onchange="toggleAllStaff(this)">
+        <label class="form-check-label fw-bold text-primary" for="selectAllStaff">Select All Employees</label>
+      </div>`;
+
+    allStaff.forEach(s => {
+      const checked = assignedIds.includes(s._id) ? 'checked' : '';
+      cont.innerHTML += `
+      <div class="form-check staff-item">
+        <input class="form-check-input staff-cb" type="checkbox" value="${s._id}" id="cb-${s._id}" ${checked}>
+        <label class="form-check-label w-100" for="cb-${s._id}">
+          <span class="fw-medium">${s.name}</span> <small class="text-muted">(${s.code}) - ${s.dept}</small>
+        </label>
+      </div>`;
+    });
+  }
+
+  function toggleAllStaff(el) {
+    document.querySelectorAll('.staff-cb').forEach(cb => cb.checked = el.checked);
+  }
+
+  async function loadRoutines() {
+    try {
+      const r = await authFetch('/api/routines');
+      const data = await r.json();
+      allRoutines = data.routines || [];
+      const cont = document.getElementById('routinesList');
+      cont.innerHTML = '';
+      
+      if(allRoutines.length === 0) {
+          cont.innerHTML = '<div class="text-center text-muted py-5">No routines created yet.</div>';
+          return;
+      }
+      
+      allRoutines.forEach(rt => {
+        const staffNames = rt.assignedTo.map(s => s.name).join(', ') || '<span class="text-muted">No one assigned</span>';
+        cont.innerHTML += `
+        <div class="routine-row">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <h6 class="fw-bold mb-0 text-navy">${rt.title}</h6>
+            <button class="btn btn-sm btn-light border text-primary" onclick="editRoutine('${rt._id}')"><i class="fa-solid fa-pen"></i></button>
+          </div>
+          <div class="small fw-semibold text-muted mb-1">Assigned (${rt.assignedTo.length}):</div>
+          <div class="small bg-white p-2 border rounded text-truncate">${staffNames}</div>
+        </div>`;
+      });
+    } catch(e) { if (e.message !== 'AUTH_REDIRECT') console.error('Routines error:', e); }
+  }
+
+  function editRoutine(id) {
+    const rt = allRoutines.find(r => r._id === id);
+    if (!rt) return;
+    document.getElementById('editId').value = rt._id;
+    document.getElementById('f-title').value = rt.title;
+    renderStaffCheckboxes(rt.assignedTo.map(s => s._id));
+  }
+
+  function resetForm() {
+    document.getElementById('routineForm').reset();
+    document.getElementById('editId').value = '';
+    renderStaffCheckboxes();
+  }
+
+  async function saveRoutine(e) {
+    e.preventDefault();
+    const id = document.getElementById('editId').value;
+    const title = document.getElementById('f-title').value;
+    const assignedTo = Array.from(document.querySelectorAll('.staff-cb:checked')).map(cb => cb.value);
+
+    const payload = { title, assignedTo };
+    const method = id ? 'PUT' : 'POST';
+    const endpoint = id ? `/api/routines/${id}` : `/api/routines`;
+
+    try {
+      const r = await authFetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await r.json();
+      if(data.success) {
+        Swal.fire({ title: 'Saved', text: 'Routine has been saved.', icon: 'success', timer: 1500 });
+        resetForm();
+        loadRoutines();
+      } else {
+        Swal.fire('Error', data.error, 'error');
+      }
+    } catch(err) {
+      if (err.message !== 'AUTH_REDIRECT') Swal.fire('Error', 'Server failed', 'error');
+    }
+  }
+
+  async function loadReport() {
+    const date = document.getElementById('reportDate').value;
+    if(!date) return;
+    
+    document.getElementById('reportTbl').innerHTML = '<tr><td colspan="2" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>';
+    
+    try {
+      const r = await authFetch(`/api/routines/report?date=${date}`);
+      const data = await r.json();
+      const logs = data.logs || [];
+      const actives = data.activeRoutines || [];
+      
+      const tbody = document.getElementById('reportTbl');
+      tbody.innerHTML = '';
+      
+      // Step 1: Group by Staff
+      // Identify all staff involved today (anyone who has an active routine assigned)
+      const staffMap = {};
+      
+      actives.forEach(rt => {
+         rt.assignedTo.forEach(st => {
+            if(!staffMap[st._id]) {
+                staffMap[st._id] = { name: st.name, tasks: [] };
+            }
+            // Check if log exists for this staff and this routine
+            const logFound = logs.find(l => l.staffId._id === st._id && l.routineTaskId._id === rt._id);
+            staffMap[st._id].tasks.push({
+               title: rt.title,
+               completed: logFound ? logFound.completed : false,
+               comment: logFound ? logFound.comment : '',
+               time: logFound ? new Date(logFound.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : ''
+            });
+         });
+      });
+      
+      if(Object.keys(staffMap).length === 0) {
+         tbody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-muted">No routines assigned to anyone.</td></tr>';
+         return;
+      }
+      
+      // Render
+      for(let sid in staffMap) {
+         const s = staffMap[sid];
+         let taskHTML = `<div class="d-flex flex-column gap-2">`;
+         s.tasks.forEach(t => {
+            if(t.completed) {
+                taskHTML += `
+                <div class="border border-success bg-success bg-opacity-10 p-2 rounded">
+                   <div class="d-flex justify-content-between">
+                     <span class="fw-semibold text-success"><i class="fa-solid fa-circle-check me-1"></i> ${t.title}</span>
+                     <span class="small text-muted">${t.time}</span>
+                   </div>
+                   <div class="mt-1 small bg-white p-1 border rounded"><strong class="text-muted">Comment:</strong> ${t.comment}</div>
+                </div>`;
+            } else {
+                taskHTML += `
+                <div class="border border-danger bg-danger bg-opacity-10 p-2 rounded">
+                   <div class="d-flex justify-content-between">
+                     <span class="fw-semibold text-danger"><i class="fa-solid fa-circle-xmark me-1"></i> ${t.title}</span>
+                     <span class="small badge bg-danger">Pending</span>
+                   </div>
+                </div>`;
+            }
+         });
+         taskHTML += `</div>`;
+         
+         const initials = s.name.substring(0,2).toUpperCase();
+         tbody.innerHTML += `
+         <tr>
+           <td style="width:250px; vertical-align:top;">
+             <div class="d-flex align-items-center">
+                <div class="avatar-sm">${initials}</div>
+                <div class="fw-bold">${s.name}</div>
+             </div>
+           </td>
+           <td>${taskHTML}</td>
+         </tr>`;
+      }
+      
+    } catch(e) {
+      document.getElementById('reportTbl').innerHTML = '<tr><td colspan="2" class="text-center py-4 text-danger">Failed to load report.</td></tr>';
+    }
+  }
+
+</script>
+</body>
+</html>

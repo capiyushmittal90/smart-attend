@@ -80,7 +80,10 @@
   <div class="card border-0 shadow-sm" style="border-radius:14px;overflow:hidden;">
     <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
       <h5 class="mb-0 fw-bold" style="color:var(--navy)"><i class="fa-solid fa-address-book me-2"></i>Client Directory</h5>
-      <button class="btn btn-navy px-4 fw-semibold" onclick="openModal()"><i class="fa-solid fa-plus me-2"></i>Add Client</button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-success px-3 fw-semibold export-btn" onclick="exportClients()"><i class="fa-solid fa-file-excel me-2"></i>Export</button>
+        <button class="btn btn-navy px-4 fw-semibold" onclick="openModal()"><i class="fa-solid fa-plus me-2"></i>Add Client</button>
+      </div>
     </div>
     <div class="card-body p-4">
       <div id="loader" class="text-center py-5">
@@ -176,7 +179,7 @@
           <h6 class="text-muted fw-bold small text-uppercase mb-3"><i class="fa-solid fa-tags me-1"></i> Preferences</h6>
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label fw-semibold small text-muted">Service Categories</label>
+              <label class="form-label fw-semibold small text-muted">Departments <span class="text-danger">*</span></label>
               <div class="d-flex flex-wrap gap-2" id="svcCheckboxes">
                 <!-- dynamically filled -->
               </div>
@@ -235,21 +238,39 @@
 <script>
 const API = '';
 let token = '', allClients = [], statesList = [];
-const SERVICES = ['GST','ITR','Audit','Subsidy','Accounting','Trademark','Other'];
+const SERVICES = [
+  'Income Tax & Audit','GST, Return & Audit','Registration Dept Normal','Registration Dept Special',
+  'Subsidy Dept','Export Dept','Finance Dept','Company Compliance Dept',
+  'Accounting & Collection Dept','Projection, DPR & CMA Dept','Equity Funding & Grant Dept',
+  'Legal Dept','Marketing Dept','Management and Research','Notice Dept','Other Working'
+];
 
 window.addEventListener('DOMContentLoaded', async () => {
   token = localStorage.getItem('sa_token');
   if (!token) { window.location.href='index.html'; return; }
 
-  // Build service checkboxes
+  // Build department checkboxes
   const box = document.getElementById('svcCheckboxes');
-  SERVICES.forEach(s => {
-    box.innerHTML += `<div class="form-check"><input class="form-check-input svc-cb" type="checkbox" value="${s}" id="cb-${s}"><label class="form-check-label small" for="cb-${s}">${s}</label></div>`;
+  SERVICES.forEach((s, i) => {
+    const cbId = 'cb-dept-' + i;
+    box.innerHTML += `<div class="form-check"><input class="form-check-input svc-cb" type="checkbox" value="${s}" id="${cbId}"><label class="form-check-label small" for="${cbId}">${s}</label></div>`;
   });
 
   await loadStates();
   await loadClients();
 });
+
+async function exportClients() {
+  try {
+    const r = await fetch(`${API}/api/clients/export`, {headers:{Authorization:'Bearer '+token}});
+    const data = await r.json();
+    if(r.ok) {
+       Swal.fire('Exporting', data.message, 'success');
+    } else {
+       Swal.fire('Access Denied', data.error, 'error');
+    }
+  } catch(e) { Swal.fire('Error','Could not export','error'); }
+}
 
 async function loadStates() {
   try {
@@ -260,12 +281,22 @@ async function loadStates() {
   } catch(e) { console.error(e); }
 }
 
+let hasFullAccess = false;
+
 async function loadClients() {
   $('#loader').show(); $('#tblWrap').hide();
   try {
     const r = await fetch(`${API}/api/clients`,{headers:{Authorization:'Bearer '+token}});
     const data = await r.json();
     allClients = data.clients || [];
+    hasFullAccess = data.fullAccess === true;
+    
+    // Hide/show security-sensitive UI based on access
+    if (!hasFullAccess) {
+      // Hide download/export buttons
+      document.querySelectorAll('.export-btn, .download-btn').forEach(el => el.style.display = 'none');
+    }
+    
     renderStats(allClients);
     renderTable(allClients);
   } catch(e) { Swal.fire('Error','Could not load clients','error'); }
@@ -285,22 +316,44 @@ function renderTable(clients) {
   const body = $('#tblBody').empty();
   clients.forEach(c => {
     const svcs = (c.serviceCategories||[]).map(s => `<span class="svc-tag">${s}</span>`).join('');
-    body.append(`<tr>
-      <td class="fw-semibold text-muted small">${c.clientCode||'—'}</td>
-      <td>
-        <div class="fw-semibold">${c.clientName}</div>
-        <div class="text-muted" style="font-size:.75rem">${c.tradeName||''}</div>
-      </td>
-      <td class="small">${c.gstin||'<span class="text-muted">—</span>'}</td>
-      <td class="small">${c.stateName||c.stateCode||'—'}</td>
-      <td class="small">${c.contactPerson||'—'}</td>
-      <td class="small">${c.phone||'—'}</td>
-      <td>${svcs||'<span class="text-muted small">—</span>'}</td>
-      <td>
-        <button class="btn btn-sm btn-out-navy me-1" onclick="viewClient('${c._id}')"><i class="fa-solid fa-eye"></i></button>
-        <button class="btn btn-sm btn-out-navy" onclick="editClient('${c._id}')"><i class="fa-solid fa-pen"></i></button>
-      </td>
-    </tr>`);
+    
+    if (hasFullAccess) {
+      // Superadmin: full data
+      body.append(`<tr>
+        <td class="fw-semibold text-muted small">${c.clientCode||'—'}</td>
+        <td>
+          <div class="fw-semibold">${c.clientName}</div>
+          <div class="text-muted" style="font-size:.75rem">${c.tradeName||''}</div>
+        </td>
+        <td class="small">${c.gstin||'<span class="text-muted">—</span>'}</td>
+        <td class="small">${c.stateName||c.stateCode||'—'}</td>
+        <td class="small">${c.contactPerson||'—'}</td>
+        <td class="small">${c.phone||'—'}</td>
+        <td>${svcs||'<span class="text-muted small">—</span>'}</td>
+        <td>
+          <button class="btn btn-sm btn-out-navy me-1" onclick="viewClient('${c._id}')" title="View"><i class="fa-solid fa-eye"></i></button>
+          <button class="btn btn-sm btn-out-navy me-1" onclick="editClient('${c._id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-sm btn-outline-success" onclick="loginAsClient('${c._id}')" title="Login as Client (Proxy)"><i class="fa-solid fa-arrow-right-to-bracket"></i></button>
+        </td>
+      </tr>`);
+    } else {
+      // Heads/Sub Heads: name + firm only, no edit/proxy
+      body.append(`<tr>
+        <td class="fw-semibold text-muted small">${c.clientCode||'—'}</td>
+        <td>
+          <div class="fw-semibold">${c.clientName}</div>
+          <div class="text-muted" style="font-size:.75rem">${c.tradeName||''}</div>
+        </td>
+        <td class="small">${c.gstin||'<span class="text-muted">—</span>'}</td>
+        <td class="small text-muted">🔒</td>
+        <td class="small text-muted">🔒</td>
+        <td class="small text-muted">🔒</td>
+        <td>${svcs||'<span class="text-muted small">—</span>'}</td>
+        <td>
+          <span class="badge bg-light text-muted border small"><i class="fa-solid fa-lock me-1"></i>View Only</span>
+        </td>
+      </tr>`);
+    }
   });
   $('#cltTbl').DataTable({ pageLength:15, order:[[0,'desc']], language:{ search:'', searchPlaceholder:'🔍 Search clients…', emptyTable:'No clients yet. Click "Add Client" to begin.' } });
   $('#loader').hide(); $('#tblWrap').fadeIn(300);
@@ -346,6 +399,13 @@ function editClient(id) {
 async function saveClient() {
   const name = document.getElementById('f-name').value.trim();
   if (!name) { Swal.fire('Required','Client name is mandatory.','warning'); return; }
+
+  // Mandatory: at least one department must be selected
+  const svcsChecked = document.querySelectorAll('.svc-cb:checked');
+  if (svcsChecked.length === 0) {
+    Swal.fire('Required','Please select at least one Department for this client.','warning');
+    return;
+  }
 
   const btn = document.getElementById('saveBtn');
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Saving…'; btn.disabled = true;
@@ -424,6 +484,39 @@ function viewClient(id) {
   document.getElementById('btnEditFromView').onclick = () => editClient(id);
   new bootstrap.Modal(document.getElementById('viewModal')).show();
 }
+
+async function loginAsClient(id) {
+    try {
+        const c = allClients.find(x => x._id === id);
+        if (!c) return;
+        
+        Swal.fire({
+            title: `Proxy Login: ${c.clientName}`,
+            text: `You will be logged in securely as this client to view their exact dashboard.`,
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'Proceed'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                const r = await fetch(`${API}/api/auth/admin-proxy-login/${id}`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await r.json();
+                if (data.success && data.token) {
+                    // Open client portal in a new tab to avoid losing admin session
+                    localStorage.setItem('sa_client_token', data.token);
+                    window.open('client-portal.html', '_blank');
+                } else {
+                    Swal.fire('Failed', data.error || 'Failed to generate proxy block', 'error');
+                }
+            }
+        });
+    } catch(e) {
+        console.error(e);
+        Swal.fire('Error', 'Server unreachable.', 'error');
+    }
+}
 </script>
+<script src="sidebar.js"></script>
 </body>
 </html>

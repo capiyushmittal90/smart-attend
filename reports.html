@@ -139,6 +139,7 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
+$.fn.dataTable.ext.errMode = 'none'; // Suppress DataTable alerts
 const API='', INR=n=>'₹'+Number(n||0).toLocaleString('en-IN');
 let token='', invoices=[], payments=[], tasks=[], activeTab='revenue';
 
@@ -186,7 +187,12 @@ async function loadReport(){
     if(from) invoices=invoices.filter(i=>new Date(i.invoiceDate)>=new Date(from));
     if(to) invoices=invoices.filter(i=>new Date(i.invoiceDate)<=new Date(to+'T23:59:59'));
 
-    renderKPIs(); renderRevenue(); renderInvoices(); renderPayments(); renderAging(); renderGST();
+    try{ renderKPIs(); }catch(_){}
+    try{ renderRevenue(); }catch(_){}
+    try{ renderInvoices(); }catch(_){}
+    try{ renderPayments(); }catch(_){}
+    try{ renderAging(); }catch(_){}
+    try{ renderGST(); }catch(_){}
   }catch(e){console.error('Report error:',e);}
 }
 
@@ -317,5 +323,6 @@ function exportPDF(){
   doc.save(`bookmyca_${activeTab}_${Date.now()}.pdf`);
 }
 </script>
+<script src="sidebar.js"></script>
 </body>
 </html>

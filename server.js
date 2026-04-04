@@ -11,6 +11,25 @@ const path = require('path');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const multer = require('multer');
+
+// Configure upload directory
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + '-' + file.originalname);
+    }
+});
+const upload = multer({ storage: storage });
 
 const app = express();
 app.use(cors());
@@ -18,6 +37,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Serve the frontend files
 app.use(express.static(path.join(__dirname)));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ============ CONFIG ============
 const SMTP_USER = process.env.SMTP_USER || 'capiyushmittal90@gmail.com';
@@ -32,6 +52,26 @@ mongoose.connect(MONGO_URI)
     .catch(err => console.error('❌ MongoDB connection failed:', err.message));
 
 // ============ MONGOOSE SCHEMAS ============
+
+// --- 16 Official Departments ---
+const DEPARTMENTS = [
+    'Income Tax & Audit',
+    'GST, Return & Audit',
+    'Registration Dept Normal',
+    'Registration Dept Special',
+    'Subsidy Dept',
+    'Export Dept',
+    'Finance Dept',
+    'Company Compliance Dept',
+    'Accounting & Collection Dept',
+    'Projection, DPR & CMA Dept',
+    'Equity Funding & Grant Dept',
+    'Legal Dept',
+    'Marketing Dept',
+    'Management and Research',
+    'Notice Dept',
+    'Other Working'
+];
 
 // --- Admin ---
 const adminSchema = new mongoose.Schema({
@@ -53,9 +93,40 @@ const staffSchema = new mongoose.Schema({
     baseSalary: { type: Number, default: 0 },
     shift: { type: String, default: 'General' },
     active: { type: Boolean, default: true },
+    // RBAC fields
+    department: { type: [String], default: [] },
+    position: { type: String, enum: ['Head', 'Sub Head', 'Co Head', 'Member'], default: 'Member' },
+    isTeamAdmin: { type: Boolean, default: false },
+    permissions: {
+        modules: [{
+            name: { type: String },
+            read: { type: Boolean, default: false },
+            write: { type: Boolean, default: false },
+            edit: { type: Boolean, default: false }
+        }],
+        canAssignTask: { type: Boolean, default: false },
+        canUploadOutput: { type: Boolean, default: true }
+    },
     createdAt: { type: Date, default: Date.now }
 });
 const Staff = mongoose.model('Staff', staffSchema);
+
+// --- Department Work List ---
+const deptWorkListSchema = new mongoose.Schema({
+    department: { type: String, required: true, unique: true },
+    workItems: [{ type: String }]
+});
+const DeptWorkList = mongoose.model('DeptWorkList', deptWorkListSchema);
+
+// --- Password Reset Token ---
+const resetTokenSchema = new mongoose.Schema({
+    email: { type: String, required: true },
+    token: { type: String, required: true },
+    type: { type: String, enum: ['admin', 'employee', 'client'], default: 'employee' },
+    expiresAt: { type: Date, required: true },
+    createdAt: { type: Date, default: Date.now }
+});
+const PasswordResetToken = mongoose.model('PasswordResetToken', resetTokenSchema);
 
 // --- Attendance Log ---
 const logSchema = new mongoose.Schema({
@@ -113,6 +184,67 @@ const settingsSchema = new mongoose.Schema({
 });
 const Settings = mongoose.model('Settings', settingsSchema);
 
+// --- Template (Checklists, Forms, Agreements) ---
+const templateSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    type: { type: String, enum: ['checklist', 'form', 'agreement'], default: 'checklist' },
+    content: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+const Template = mongoose.model('Template', templateSchema);
+
+// --- File Attachment (Input/Output) ---
+const fileSchema = new mongoose.Schema({
+    taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
+    clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
+    originalName: { type: String, required: true },
+    filename: { type: String, required: true },
+    path: { type: String, required: true },
+    folder: { type: String, enum: ['input', 'output'], required: true }, // 'input' from client, 'output' from staff
+    uploadedBy: { type: String }, // 'Client' or specific staff ID
+    uploadedByName: { type: String },
+    createdAt: { type: Date, default: Date.now }
+});
+const FileAttachment = mongoose.model('FileAttachment', fileSchema);
+
+// --- Advertisement / Banners ---
+const adSchema = new mongoose.Schema({
+    imagePath: { type: String, required: true },        // Path to image file
+    title: { type: String, default: '' },
+    targetClients: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Client' }], // specific clients to target
+    createdAt: { type: Date, default: Date.now }
+});
+const Advertisement = mongoose.model('Advertisement', adSchema);
+
+// --- AI Scraper & Subsidy Engine ---
+const subsidySourceSchema = new mongoose.Schema({
+    url: { type: String, required: true },
+    title: { type: String, default: 'Subsidy Website' },
+    lastScraped: { type: Date },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now }
+});
+const SubsidySource = mongoose.model('SubsidySource', subsidySourceSchema);
+
+const verifiedSubsidySchema = new mongoose.Schema({
+    sourceUrl: { type: String },
+    subsidyName: { type: String, required: true },
+    eligibility: { type: String },
+    benefits: { type: String },
+    rawScrapedData: { type: String }, // What the scraper found
+    verifiedBy: [{ type: String }], // Array of models that verified it (e.g. 'gemini', 'openai', 'claude')
+    isPublishedToFB: { type: Boolean, default: false },
+    isPublishedToInsta: { type: Boolean, default: false },
+    isPublishedToYT: { type: Boolean, default: false },
+    isPublishedToWA: { type: Boolean, default: false },
+    isPublishedToBlog: { type: Boolean, default: false },
+    generatedBrochurePath: { type: String }, // Path to the dynamically built PNG ad
+    extractedAt: { type: Date, default: Date.now }
+});
+const VerifiedSubsidy = mongoose.model('VerifiedSubsidy', verifiedSubsidySchema);
+
+
 // ============ SEED DEFAULT DATA ============
 async function seedDefaults() {
     // Default admin
@@ -169,7 +301,8 @@ const otpStore = new Map(); // email -> { otp, expires, staffId }
 // ============ JWT MIDDLEWARE ============
 function authMiddleware(requiredRole) {
     return (req, res, next) => {
-        const token = req.headers.authorization?.split(' ')[1];
+        let token = req.headers.authorization?.split(' ')[1];
+        if (!token && req.query.token) token = req.query.token;
         if (!token) return res.status(401).json({ error: 'No token provided' });
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
@@ -225,10 +358,246 @@ app.post('/api/auth/employee-login', async (req, res) => {
     }
 
     const token = jwt.sign(
-        { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, shift: staff.shift, type: 'employee' },
+        { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, departments: staff.department, shift: staff.shift, type: 'employee' },
         JWT_SECRET, { expiresIn: '12h' }
     );
-    res.json({ success: true, token, employee: { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, shift: staff.shift } });
+    res.json({ success: true, token, employee: { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, departments: staff.department, shift: staff.shift } });
+});
+
+// Client Login — Password based
+app.post('/api/auth/client-login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+    const client = await Client.findOne({ $or: [{email: email.toLowerCase()}, {phone: email}], isActive: true });
+    if (!client) return res.status(404).json({ error: 'Client not found or inactive.' });
+
+    const validPassword = client.password || '123456';
+    if (password !== validPassword) {
+        return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    const token = jwt.sign(
+        { id: client._id, clientCode: client.clientCode, name: client.clientName, email: client.email, phone: client.phone, type: 'client' },
+        JWT_SECRET, { expiresIn: '7d' }
+    );
+    res.json({ success: true, token, client: { id: client._id, name: client.clientName, email: client.email, phone: client.phone } });
+});
+
+// Admin Magic Login as Client
+app.get('/api/auth/admin-proxy-login/:clientId', adminAuth, async (req, res) => {
+    const client = await Client.findById(req.params.clientId);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    // Generate a temporary client token but mark it as proxy so we can log auditing later if needed
+    const proxyToken = jwt.sign(
+        { id: client._id, clientCode: client.clientCode, name: client.clientName, type: 'client', isProxy: true, adminId: req.user.id },
+        JWT_SECRET, { expiresIn: '1h' }
+    );
+    res.json({ success: true, token: proxyToken });
+});
+
+// ============ FORGOT PASSWORD ============
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+        const emailLower = email.toLowerCase();
+
+        // Find the user in any collection
+        let userType = '', userName = '';
+        const admin = await Admin.findOne({ email: emailLower });
+        if (admin) { userType = 'admin'; userName = admin.name; }
+        if (!userType) {
+            const staff = await Staff.findOne({ email: emailLower, active: true });
+            if (staff) { userType = 'employee'; userName = staff.name; }
+        }
+        if (!userType) {
+            const client = await Client.findOne({ $or: [{ email: emailLower }, { phone: email }], isActive: true });
+            if (client) { userType = 'client'; userName = client.clientName; }
+        }
+        if (!userType) return res.status(404).json({ error: 'No account found with this email' });
+
+        // Role Verification (Only for Super Admin)
+        if (userType !== 'admin' && userType !== 'superadmin') {
+            return res.status(403).json({ 
+                error: 'Password reset denied. Please contact the Super Admin to reset your password.' 
+            });
+        }
+
+        // Generate 6-digit OTP
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+        // Remove any old tokens for this email
+        await PasswordResetToken.deleteMany({ email: emailLower });
+        await PasswordResetToken.create({ email: emailLower, token: otp, type: userType, expiresAt });
+
+        // Send email
+        await transporter.sendMail({
+            from: `"${SENDER_NAME}" <${SMTP_USER}>`,
+            to: emailLower,
+            subject: 'BookMyCA — Password Reset OTP',
+            html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+                <h2 style="color:#0F172A;text-align:center;">🔐 Password Reset</h2>
+                <p>Hello <strong>${userName}</strong>,</p>
+                <p>Your One-Time Password for resetting your BookMyCA account password is:</p>
+                <div style="text-align:center;margin:24px 0;">
+                    <span style="display:inline-block;background:#0F172A;color:#38BDF8;padding:16px 32px;border-radius:12px;font-size:28px;letter-spacing:8px;font-weight:700;">${otp}</span>
+                </div>
+                <p style="color:#666;font-size:13px;">This OTP expires in <strong>10 minutes</strong>. If you didn't request this, please ignore this email.</p>
+                <hr style="border-color:#E2E8F0;">
+                <p style="color:#999;font-size:11px;text-align:center;">BookMyCA Smart Attend Suite</p>
+            </div>`
+        });
+
+        res.json({ success: true, message: 'OTP sent to your email', userType });
+    } catch (err) {
+        console.error('Forgot password error:', err);
+        res.status(500).json({ error: 'Failed to send OTP: ' + err.message });
+    }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        if (!email || !otp || !newPassword) return res.status(400).json({ error: 'Email, OTP and new password are required' });
+        if (newPassword.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+
+        const emailLower = email.toLowerCase();
+        const tokenDoc = await PasswordResetToken.findOne({ email: emailLower, token: otp });
+        if (!tokenDoc) return res.status(400).json({ error: 'Invalid OTP' });
+        if (tokenDoc.expiresAt < new Date()) {
+            await PasswordResetToken.deleteMany({ email: emailLower });
+            return res.status(400).json({ error: 'OTP has expired. Please request again.' });
+        }
+
+        // Update password based on user type
+        if (tokenDoc.type === 'admin') {
+            const hash = await bcrypt.hash(newPassword, 10);
+            await Admin.updateOne({ email: emailLower }, { password: hash });
+        } else if (tokenDoc.type === 'employee') {
+            await Staff.updateOne({ email: emailLower }, { password: newPassword });
+        } else if (tokenDoc.type === 'client') {
+            await Client.updateOne({ email: emailLower }, { password: newPassword });
+        }
+
+        // Cleanup
+        await PasswordResetToken.deleteMany({ email: emailLower });
+        res.json({ success: true, message: 'Password has been reset successfully!' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to reset password: ' + err.message });
+    }
+});
+
+// ============ SUPER ADMIN PANEL (superadmin only) ============
+
+function superadminAuth(req, res, next) {
+    let token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin access only' });
+        req.user = decoded;
+        next();
+    } catch (e) { return res.status(401).json({ error: 'Invalid token' }); }
+}
+
+// Get departments list
+app.get('/api/departments', anyAuth, (req, res) => {
+    res.json({ success: true, departments: DEPARTMENTS });
+});
+
+// Get all employees with RBAC data (superadmin only)
+app.get('/api/superadmin/employees', superadminAuth, async (req, res) => {
+    try {
+        const staff = await Staff.find({ active: true }).sort({ name: 1 });
+        res.json({ success: true, employees: staff });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update employee access (department, position, permissions)
+app.put('/api/superadmin/employee/:id/access', superadminAuth, async (req, res) => {
+    try {
+        const { department, position, isTeamAdmin, permissions } = req.body;
+        const update = {};
+        if (department !== undefined) {
+            update.department = Array.isArray(department) ? department : [department].filter(Boolean);
+            update.dept = update.department[0] || '';
+        }
+        if (position !== undefined) update.position = position;
+        if (isTeamAdmin !== undefined) update.isTeamAdmin = isTeamAdmin;
+        if (permissions !== undefined) update.permissions = permissions;
+
+        const staff = await Staff.findByIdAndUpdate(req.params.id, update, { new: true });
+        if (!staff) return res.status(404).json({ error: 'Employee not found' });
+        res.json({ success: true, employee: staff });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Bulk update all employees' access
+app.put('/api/superadmin/employees/bulk-access', superadminAuth, async (req, res) => {
+    try {
+        const { updates } = req.body; // Array of { id, department, position, isTeamAdmin, permissions }
+        if (!updates || !Array.isArray(updates)) return res.status(400).json({ error: 'Invalid data' });
+
+        let updated = 0;
+        for (const u of updates) {
+            const upd = {};
+            if (u.department !== undefined) {
+                upd.department = Array.isArray(u.department) ? u.department : [u.department].filter(Boolean);
+                upd.dept = upd.department[0] || '';
+            }
+            if (u.position !== undefined) upd.position = u.position;
+            if (u.isTeamAdmin !== undefined) upd.isTeamAdmin = u.isTeamAdmin;
+            if (u.permissions !== undefined) upd.permissions = u.permissions;
+            await Staff.findByIdAndUpdate(u.id, upd);
+            updated++;
+        }
+        res.json({ success: true, updated });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get dept work lists
+app.get('/api/superadmin/dept-work', superadminAuth, async (req, res) => {
+    try {
+        const lists = await DeptWorkList.find().sort({ department: 1 });
+        res.json({ success: true, lists });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get work items for a specific dept (any auth)
+app.get('/api/dept-work/:dept', anyAuth, async (req, res) => {
+    try {
+        const doc = await DeptWorkList.findOne({ department: req.params.dept });
+        res.json({ success: true, workItems: doc ? doc.workItems : [] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update dept work list
+app.put('/api/superadmin/dept-work/:dept', superadminAuth, async (req, res) => {
+    try {
+        const { workItems } = req.body;
+        const doc = await DeptWorkList.findOneAndUpdate(
+            { department: req.params.dept },
+            { department: req.params.dept, workItems: workItems || [] },
+            { new: true, upsert: true }
+        );
+        res.json({ success: true, list: doc });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ============ STAFF ROUTES (Admin only) ============
@@ -877,6 +1246,7 @@ const clientSchema = new mongoose.Schema({
     contactPerson:   { type: String, default: '' },
     phone:           { type: String, default: '' },
     email:           { type: String, default: '' },
+    password:        { type: String, default: '123456' },   // Simple password for client portal
     serviceCategories: [{ type: String }],                  // GST, ITR, Audit etc.
     paymentTerms:    { type: String, default: 'Net 30' },   // Net 15, 30, 45, custom
     notes:           { type: String, default: '' },
@@ -905,7 +1275,7 @@ async function getNextSequence(name) {
 
 // ── CLIENT ROUTES ──────────────────────────────────────────────
 
-// List all clients (for dropdowns + management)
+// List all clients — superadmin gets full data, others get limited fields
 app.get('/api/clients', anyAuth, async (req, res) => {
     try {
         const { search, active } = req.query;
@@ -921,7 +1291,31 @@ app.get('/api/clients', anyAuth, async (req, res) => {
                 { clientCode: { $regex: search, $options: 'i' } }
             ];
         }
-        const clients = await Client.find(filter).sort({ clientName: 1 });
+
+        const isSuperAdmin = req.user.role === 'superadmin';
+        
+        if (isSuperAdmin) {
+            // Full access
+            const clients = await Client.find(filter).sort({ clientName: 1 });
+            res.json({ success: true, clients, fullAccess: true });
+        } else {
+            // Limited: only name, trade name, code, _id, serviceCategories
+            const clients = await Client.find(filter)
+                .select('_id clientCode clientName tradeName gstin serviceCategories isActive')
+                .sort({ clientName: 1 });
+            res.json({ success: true, clients, fullAccess: false });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Limited client list for task assignment (any auth — name + firm only)
+app.get('/api/clients/names', anyAuth, async (req, res) => {
+    try {
+        const clients = await Client.find({ isActive: true })
+            .select('_id clientCode clientName tradeName gstin')
+            .sort({ clientName: 1 });
         res.json({ success: true, clients });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -939,6 +1333,16 @@ app.get('/api/clients/:id', anyAuth, async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// Client Excel Download API (Super Admin Only)
+app.get('/api/clients/export', anyAuth, async (req, res) => {
+    if (req.user.role !== 'superadmin') {
+        return res.status(403).json({ error: 'Access Denied. Only Super Admin can download client data.' });
+    }
+    
+    // Placeholder logic for downloading Excel/CSV
+    res.status(200).json({ message: 'Download started...' });
 });
 
 // Create client
@@ -1027,19 +1431,44 @@ const taskSchema = new mongoose.Schema({
     staffName:      { type: String, required: true },
     clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
     clientName:     { type: String, required: true },
-    serviceType:    { type: String, enum: ['GST','ITR','Audit','Subsidy','Accounting','Trademark','Other'], default: 'Other' },
-    subService:     { type: String, default: '' },
+    serviceType:    { type: String, default: 'Other Working' },  // Legacy compat — now stores dept name
+    department:     { type: String, default: '' },   // Primary: Dept Name from 16-dept list
+    workType:       { type: String, default: '' },   // Work type within dept
+    subService:     { type: String, default: '' },   // Legacy compat
     workStatus:     { type: String, enum: ['Not Started','In Progress','Completed'], default: 'Not Started' },
     estimatedFees:  { type: Number, default: 0 },
     finalFees:      { type: Number, default: 0 },
     invoiceStatus:  { type: String, enum: ['Not Raised','Raised'], default: 'Not Raised' },
     paymentStatus:  { type: String, enum: ['Pending','Partial','Received'], default: 'Pending' },
     amountReceived: { type: Number, default: 0 },
+    estimatedTime:  { type: String, default: '' },
+    sendToClient:   { type: Boolean, default: false },
     notes:          { type: String, default: '' },
     createdAt:      { type: Date, default: Date.now },
     updatedAt:      { type: Date, default: Date.now }
 });
 const Task = mongoose.model('Task', taskSchema);
+
+// --- Daily Routine Tasks ---
+const routineTaskSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    isActive: { type: Boolean, default: true },
+    assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Staff' }],
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+    createdAt: { type: Date, default: Date.now }
+});
+const RoutineTask = mongoose.model('RoutineTask', routineTaskSchema);
+
+const dailyRoutineLogSchema = new mongoose.Schema({
+    date: { type: String, required: true }, // YYYY-MM-DD
+    staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
+    routineTaskId: { type: mongoose.Schema.Types.ObjectId, ref: 'RoutineTask', required: true },
+    completed: { type: Boolean, default: false },
+    comment: { type: String, default: '' },
+    timestamp: { type: Date, default: Date.now }
+});
+const DailyRoutineLog = mongoose.model('DailyRoutineLog', dailyRoutineLogSchema);
+
 
 // Helper: compute KPIs from a list of task docs
 function computeTaskKPIs(tasks) {
@@ -1078,81 +1507,6 @@ app.get('/api/tasks/my', anyAuth, async (req, res) => {
         res.json({ success: true, tasks, kpis, user: { id: req.user.id, name: req.user.name, code: req.user.code, email: req.user.email } });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch tasks: ' + err.message });
-    }
-});
-
-// ── Employee: Create a new task ──────────────────────────────────
-app.post('/api/tasks', anyAuth, async (req, res) => {
-    try {
-        const { clientId, clientName, serviceType, subService, workStatus, estimatedFees, finalFees, invoiceStatus, paymentStatus, amountReceived, notes, staffId: bodyStaffId } = req.body;
-        if (!clientName) return res.status(400).json({ error: 'Client name is required' });
-
-        // Try finding staff - for employee it's req.user.id, for admin it could be passed in body
-        let staff = await Staff.findById(req.user.id);
-        if (!staff && bodyStaffId) {
-            staff = await Staff.findById(bodyStaffId);
-        }
-        // If admin and no staffId specified, allow self-assignment with admin info
-        if (!staff) {
-            // Check if user is admin
-            try {
-                const payload = JSON.parse(atob(req.headers.authorization.split('.')[1].split('.')[0]));
-                if (payload.type === 'admin' || payload.role === 'superadmin') {
-                    const admin = await Admin.findById(req.user.id);
-                    if (admin) {
-                        staff = { _id: admin._id, code: 'ADMIN', name: admin.name };
-                    }
-                }
-            } catch(_) {}
-        }
-        if (!staff) return res.status(404).json({ error: 'Employee not found' });
-
-        const taskId = await generateTaskId();
-        const task = await Task.create({
-            taskId,
-            staffId: staff._id,
-            staffCode: staff.code,
-            staffName: staff.name,
-            clientId: clientId || undefined,
-            clientName,
-            serviceType: serviceType || 'Other',
-            subService: subService || '',
-            workStatus: workStatus || 'Not Started',
-            estimatedFees: Number(estimatedFees) || 0,
-            finalFees: Number(finalFees) || 0,
-            invoiceStatus: invoiceStatus || 'Not Raised',
-            paymentStatus: paymentStatus || 'Pending',
-            amountReceived: Number(amountReceived) || 0,
-            notes: notes || ''
-        });
-        res.json({ success: true, task, message: 'Task created! ID: ' + taskId });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to create task: ' + err.message });
-    }
-});
-
-// ── Employee: Update own task ────────────────────────────────────
-app.put('/api/tasks/:id', anyAuth, async (req, res) => {
-    try {
-        const filter = { _id: req.params.id };
-        // Employees can only edit their own tasks; admins can edit any
-        if (req.user.type !== 'admin' && req.user.role !== 'superadmin') {
-            filter.staffId = req.user.id;
-        }
-        const { clientName, serviceType, subService, workStatus, estimatedFees, finalFees, invoiceStatus, paymentStatus, amountReceived, notes } = req.body;
-        const task = await Task.findOneAndUpdate(filter, {
-            clientName, serviceType, subService, workStatus,
-            estimatedFees: Number(estimatedFees) || 0,
-            finalFees: Number(finalFees) || 0,
-            invoiceStatus, paymentStatus,
-            amountReceived: Number(amountReceived) || 0,
-            notes: notes || '',
-            updatedAt: Date.now()
-        }, { new: true });
-        if (!task) return res.status(404).json({ error: 'Task not found or access denied' });
-        res.json({ success: true, task, message: 'Task updated successfully!' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update task: ' + err.message });
     }
 });
 
@@ -1199,6 +1553,109 @@ app.get('/api/tasks/staff-list', adminAuth, async (req, res) => {
     }
 });
 
+// ── Shared: Get a specific task by ID ────────────────────────────
+app.get('/api/tasks/:id', anyAuth, async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+        
+        let hasAccess = false;
+        if (req.user.type === 'admin' || req.user.role === 'superadmin') hasAccess = true;
+        else if (req.user.type === 'client' && task.clientId && req.user.id === task.clientId.toString()) hasAccess = true;
+        else if (task.staffId && req.user.id === task.staffId.toString()) hasAccess = true;
+
+        if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
+        res.json({ success: true, task });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch task: ' + err.message });
+    }
+});
+
+// ── Employee: Create a new task ──────────────────────────────────
+app.post('/api/tasks', anyAuth, async (req, res) => {
+    try {
+        const { clientId, clientName, serviceType, subService, workStatus, estimatedFees, finalFees, invoiceStatus, paymentStatus, amountReceived, estimatedTime, department, sendToClient, notes, staffId: bodyStaffId } = req.body;
+        if (!clientName) return res.status(400).json({ error: 'Client name is required' });
+
+        // Try finding staff - for employee it's req.user.id, for admin it could be passed in body
+        let staff = await Staff.findById(req.user.id);
+        if (!staff && bodyStaffId) {
+            staff = await Staff.findById(bodyStaffId);
+        }
+        // If admin and no staffId specified, allow self-assignment with admin info
+        if (!staff) {
+            // Check if user is admin
+            try {
+                const payload = JSON.parse(atob(req.headers.authorization.split('.')[1].split('.')[0]));
+                if (payload.type === 'admin' || payload.role === 'superadmin') {
+                    const admin = await Admin.findById(req.user.id);
+                    if (admin) {
+                        staff = { _id: admin._id, code: 'ADMIN', name: admin.name };
+                    }
+                }
+            } catch(_) {}
+        }
+        if (!staff) return res.status(404).json({ error: 'Employee not found' });
+
+        const taskId = await generateTaskId();
+        const deptVal = department || serviceType || 'Other Working';
+        const task = await Task.create({
+            taskId,
+            staffId: staff._id,
+            staffCode: staff.code,
+            staffName: staff.name,
+            clientId: clientId || undefined,
+            clientName,
+            serviceType: deptVal,
+            department: deptVal,
+            workType: workType || subService || '',
+            subService: subService || workType || '',
+            workStatus: workStatus || 'Not Started',
+            estimatedFees: Number(estimatedFees) || 0,
+            finalFees: Number(finalFees) || 0,
+            invoiceStatus: invoiceStatus || 'Not Raised',
+            paymentStatus: paymentStatus || 'Pending',
+            amountReceived: Number(amountReceived) || 0,
+            estimatedTime: estimatedTime || '',
+            sendToClient: sendToClient === true || sendToClient === 'true',
+            notes: notes || ''
+        });
+        res.json({ success: true, task, message: 'Task created! ID: ' + taskId });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create task: ' + err.message });
+    }
+});
+
+// ── Employee: Update own task ────────────────────────────────────
+app.put('/api/tasks/:id', anyAuth, async (req, res) => {
+    try {
+        const filter = { _id: req.params.id };
+        // Employees can only edit their own tasks; admins can edit any
+        if (req.user.type !== 'admin' && req.user.role !== 'superadmin') {
+            filter.staffId = req.user.id;
+        }
+        const { clientName, serviceType, subService, workType, workStatus, estimatedFees, finalFees, invoiceStatus, paymentStatus, amountReceived, estimatedTime, department, sendToClient, notes } = req.body;
+        const deptVal = department || serviceType || '';
+        const task = await Task.findOneAndUpdate(filter, {
+            clientName, serviceType: deptVal, department: deptVal,
+            workType: workType || subService || '', subService: subService || workType || '',
+            workStatus,
+            estimatedFees: Number(estimatedFees) || 0,
+            finalFees: Number(finalFees) || 0,
+            invoiceStatus, paymentStatus,
+            amountReceived: Number(amountReceived) || 0,
+            estimatedTime: estimatedTime || '',
+            sendToClient: sendToClient === true || sendToClient === 'true',
+            notes: notes || '',
+            updatedAt: Date.now()
+        }, { new: true });
+        if (!task) return res.status(404).json({ error: 'Task not found or access denied' });
+        res.json({ success: true, task, message: 'Task updated successfully!' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update task: ' + err.message });
+    }
+});
+
 // ── Admin: Delete a task ─────────────────────────────────────────
 app.delete('/api/tasks/:id', adminAuth, async (req, res) => {
     try {
@@ -1212,7 +1669,7 @@ app.delete('/api/tasks/:id', adminAuth, async (req, res) => {
 // ── Admin: Create task for ANY employee (assigns by staffId) ─────
 app.post('/api/tasks/admin-create', adminAuth, async (req, res) => {
     try {
-        const { staffId, clientId, clientName, serviceType, subService, workStatus, estimatedFees, finalFees,
+        const { staffId, clientId, clientName, serviceType, subService, department, workType, workStatus, estimatedFees, finalFees,
                 invoiceStatus, paymentStatus, amountReceived, notes, staffName, staffCode } = req.body;
         if (!clientName) return res.status(400).json({ error: 'Client name is required' });
         if (!staffId)    return res.status(400).json({ error: 'Employee (staffId) is required' });
@@ -1222,6 +1679,7 @@ app.post('/api/tasks/admin-create', adminAuth, async (req, res) => {
         if (!staff) return res.status(404).json({ error: 'Employee not found' });
 
         const taskId = await generateTaskId();
+        const deptVal = department || serviceType || 'Other Working';
         const task = await Task.create({
             taskId,
             staffId: staff._id,
@@ -1229,8 +1687,10 @@ app.post('/api/tasks/admin-create', adminAuth, async (req, res) => {
             staffName: staff.name,
             clientId,
             clientName,
-            serviceType: serviceType || 'Other',
-            subService: subService || '',
+            serviceType: deptVal,
+            department: deptVal,
+            workType: workType || subService || '',
+            subService: subService || workType || '',
             workStatus: workStatus || 'Not Started',
             estimatedFees: Number(estimatedFees) || 0,
             finalFees: Number(finalFees) || 0,
@@ -1242,6 +1702,143 @@ app.post('/api/tasks/admin-create', adminAuth, async (req, res) => {
         res.json({ success: true, task, message: `Task ${taskId} assigned to ${staff.name}!` });
     } catch (err) {
         res.status(500).json({ error: 'Failed to create task: ' + err.message });
+    }
+});
+
+// ============ ROUTINE TASKS ROUTES ============
+
+// Superadmin: Get all routines
+app.get('/api/routines', adminAuth, async (req, res) => {
+    try {
+        const routines = await RoutineTask.find({ isActive: true }).populate('assignedTo', 'name code').sort({ createdAt: -1 });
+        res.json({ success: true, routines });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Superadmin: Create new routine
+app.post('/api/routines', adminAuth, async (req, res) => {
+    const { title, assignedTo } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+    try {
+        const routine = await RoutineTask.create({
+            title,
+            assignedTo: Array.isArray(assignedTo) ? assignedTo : [],
+            createdBy: req.user.id
+        });
+        res.json({ success: true, routine });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Superadmin: Edit routine (assign/reassign)
+app.put('/api/routines/:id', adminAuth, async (req, res) => {
+    const { title, assignedTo, isActive } = req.body;
+    try {
+        const update = {};
+        if (title !== undefined) update.title = title;
+        if (assignedTo !== undefined) update.assignedTo = Array.isArray(assignedTo) ? assignedTo : [];
+        if (isActive !== undefined) update.isActive = isActive;
+        
+        const routine = await RoutineTask.findByIdAndUpdate(req.params.id, update, { new: true });
+        res.json({ success: true, routine });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Employee: Get today's routines
+app.get('/api/routines/my-today', anyAuth, async (req, res) => {
+    try {
+        const now = new Date();
+        const IST = { timeZone: 'Asia/Kolkata' };
+        
+        // Date format YYYY-MM-DD
+        const year = now.toLocaleString('en-US', { ...IST, year: 'numeric' });
+        const month = now.toLocaleString('en-US', { ...IST, month: '2-digit' });
+        const day = now.toLocaleString('en-US', { ...IST, day: '2-digit' });
+        const todayStr = `${year}-${month}-${day}`;
+        
+        // Date format DD/MM/YYYY for Leave system
+        const localNow = new Date(now.toLocaleString('en-US', IST));
+        const leaveDateStr = localNow.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        // Skip rule 1: Sunday
+        if (localNow.getDay() === 0) {
+            return res.json({ success: true, date: todayStr, routines: [], isSunday: true });
+        }
+        
+        // Skip rule 2: Leave
+        const leave = await LeaveRequest.findOne({ staffId: req.user.id, date: leaveDateStr, status: 'approved' });
+        if (leave && leave.leaveType === 'full') {
+            return res.json({ success: true, date: todayStr, routines: [], isLeave: true });
+        }
+
+        const routines = await RoutineTask.find({ isActive: true, assignedTo: req.user.id });
+        const logs = await DailyRoutineLog.find({ staffId: req.user.id, date: todayStr });
+        
+        const mapped = routines.map(r => {
+            const log = logs.find(l => l.routineTaskId.toString() === r._id.toString());
+            return {
+                _id: r._id,
+                title: r.title,
+                completed: log ? log.completed : false,
+                comment: log ? log.comment : '',
+                logId: log ? log._id : null
+            };
+        });
+        
+        res.json({ success: true, date: todayStr, routines: mapped });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Employee: Mark routine as complete
+app.post('/api/routines/complete', anyAuth, async (req, res) => {
+    const { routineTaskId, comment, date } = req.body;
+    if (!comment || comment.trim() === '') {
+        return res.status(400).json({ error: 'Comment is mandatory to mark this task complete.' });
+    }
+    
+    try {
+        let log = await DailyRoutineLog.findOne({ staffId: req.user.id, routineTaskId, date });
+        if (log) {
+            log.completed = true;
+            log.comment = comment.trim();
+            log.timestamp = new Date();
+            await log.save();
+        } else {
+            log = await DailyRoutineLog.create({
+                date,
+                staffId: req.user.id,
+                routineTaskId,
+                completed: true,
+                comment: comment.trim()
+            });
+        }
+        res.json({ success: true, log });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Superadmin: Get report by date
+app.get('/api/routines/report', adminAuth, async (req, res) => {
+    const { date } = req.query; // YYYY-MM-DD
+    if (!date) return res.status(400).json({ error: 'Date is required' });
+    try {
+        const logs = await DailyRoutineLog.find({ date })
+            .populate('staffId', 'name code dept')
+            .populate('routineTaskId', 'title');
+            
+        const allRoutines = await RoutineTask.find({ isActive: true }).populate('assignedTo', 'name');
+        
+        res.json({ success: true, logs, activeRoutines: allRoutines });
+    } catch(err) {
+         res.status(500).json({ error: err.message });
     }
 });
 
@@ -1270,6 +1867,7 @@ const invoiceSchema = new mongoose.Schema({
     igstAmt:         { type: Number, default: 0 },
     totalAmount:     { type: Number, default: 0 },
     amountInWords:   { type: String, default: '' },
+    firmKey:         { type: String, default: 'avpm' },
     firmName:        { type: String, default: 'AVPM & ASSOCIATES' },
     firmGstin:       { type: String, default: '08ABKFA4108L1ZC' },
     firmAddress:     { type: String, default: '11-K-3 SAHKAR MARG, INFRONT OF JAIPUR MAHANAGAR TIMES, NEAR JYOTI NAGAR THANA, LAL KOTHI, JAIPUR, RAJASTHAN 302015' },
@@ -1299,15 +1897,17 @@ const invoiceSchema = new mongoose.Schema({
 });
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
-// Auto invoice number: BMC/YY-YY/NNNN
-async function generateInvoiceNo() {
+// Auto invoice number: PREFIX/YY-YY/NNNN
+async function generateInvoiceNo(firmKey = 'avpm') {
+    const prefixes = { avpm: 'AVPM', bmc: 'BMC', aayu: 'AAYU', huf: 'PMHUF' };
+    const prefix = prefixes[firmKey] || 'BMC';
     const now = new Date();
     const month = now.getMonth();
     const fy1 = month >= 3 ? now.getFullYear() : now.getFullYear() - 1;
     const fy2 = fy1 + 1;
     const fySuffix = `${String(fy1).slice(2)}-${String(fy2).slice(2)}`;
-    const seq = await getNextSequence(`invoiceNo_${fySuffix}`);
-    return `BMC/${fySuffix}/${String(seq).padStart(4, '0')}`;
+    const seq = await getNextSequence(`invoiceNo_${prefix}_${fySuffix}`);
+    return `${prefix}/${fySuffix}/${String(seq).padStart(4, '0')}`;
 }
 
 // Number to Indian words
@@ -1332,7 +1932,7 @@ function numberToWords(num) {
 // ── Create Invoice ──────────────────────────────────────────────
 app.post('/api/invoices', anyAuth, async (req, res) => {
     try {
-        const { taskId, clientId, customClientName, invoiceType, lineItems, notes, paymentTerms, invoiceDate } = req.body;
+        const { taskId, clientId, customClientName, invoiceType, lineItems, notes, paymentTerms, invoiceDate, firmKey } = req.body;
         let client = null;
         if (clientId && clientId !== 'CUSTOM') client = await Client.findById(clientId);
         if (!client && taskId) { const task = await Task.findById(taskId); if (task?.clientId) client = await Client.findById(task.clientId); }
@@ -1358,7 +1958,17 @@ app.post('/api/invoices', anyAuth, async (req, res) => {
         else if (gstType==='IGST') { igstAmt=Math.round(taxableAmount*0.18*100)/100; }
         const totalAmount = Math.round((taxableAmount+cgstAmt+sgstAmt+igstAmt)*100)/100;
 
-        const invoiceNo = await generateInvoiceNo();
+        const fk = firmKey || 'avpm';
+        const invoiceNo = await generateInvoiceNo(fk);
+        
+        const FIRMS_MAP = {
+            avpm: { name: 'AVPM & Associates', gstin: '08ABKFA4108L1ZC', address: '11 K-3, JYOTINAGAR,SAHAKAR MARG,, LALKOTHISCHEME,,NEAR VIDHANSABHA, JAIPUR,RAJASTHAN,INDIA, 302015', email: 'capiyushmittal90@gmail.com' },
+            bmc: { name: 'Bookmyca (A Unit of Aayu Consulting Group)', gstin: '08BXTPA0253J1ZE', address: '11 K-3, JYOTINAGAR,SAHAKAR MARG,, LALKOTHISCHEME,,NEAR VIDHANSABHA, JAIPUR,RAJASTHAN,INDIA, 302015', email: 'capiyushmittal90@gmail.com' },
+            aayu: { name: 'Aayu Consulting Group Private Limited', gstin: '08ABCCA6884A1ZQ', address: '11-K-3, Second Gate, Near Aadhunik Baal Vidhyalaya, Sahkar Marg, Jyoti Nagar, Near Vidhan Sabha, Jaipur 302015', email: 'capiyushmittal90@gmail.com' },
+            huf: { name: 'Piyush Mittal HUF', gstin: '', address: '11 K-3, JYOTINAGAR,SAHAKAR MARG,, LALKOTHISCHEME,,NEAR VIDHANSABHA, JAIPUR,RAJASTHAN,INDIA, 302015', email: '' }
+        };
+        const f = FIRMS_MAP[fk] || FIRMS_MAP['avpm'];
+
         let creatorName = 'System';
         try { const s = await Staff.findById(req.user.id); if(s) creatorName=s.name; } catch(_){}
 
@@ -1371,6 +1981,7 @@ app.post('/api/invoices', anyAuth, async (req, res) => {
             invoiceType: invoiceType||'GST', gstType,
             lineItems: items, taxableAmount, cgstRate:9, cgstAmt, sgstRate:9, sgstAmt, igstRate:18, igstAmt,
             totalAmount, amountInWords: numberToWords(Math.round(totalAmount)),
+            firmKey: fk, firmName: f.name.toUpperCase(), firmGstin: f.gstin, firmAddress: f.address, firmEmail: f.email,
             clientName: cName, clientGstin: cGstin,
             clientAddress: cAddress,
             clientState: cStateName, clientStateCode: cStateCode, clientEmail: cEmail,
@@ -1586,6 +2197,236 @@ app.delete('/api/payments/:id', adminAuth, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// ============ TEMPLATE MASTER (CHECKLISTS/FORMS) ============
+
+// ── Get all templates ──────────────────────────────────────────
+app.get('/api/templates', anyAuth, async (req, res) => {
+    try {
+        const templates = await Template.find().sort({ createdAt: -1 });
+        res.json({ success: true, templates });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Create new template (admin) ────────────────────────────────
+app.post('/api/templates', adminAuth, async (req, res) => {
+    try {
+        const { title, type, content } = req.body;
+        if (!title) return res.status(400).json({ error: 'Title is required' });
+        const template = await Template.create({ title, type: type || 'checklist', content: content || '' });
+        res.json({ success: true, template, message: 'Template created successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Update template (admin) ────────────────────────────────────
+app.put('/api/templates/:id', adminAuth, async (req, res) => {
+    try {
+        const { title, type, content } = req.body;
+        const updateData = { updatedAt: Date.now() };
+        if (title) updateData.title = title;
+        if (type) updateData.type = type;
+        if (content !== undefined) updateData.content = content;
+
+        const template = await Template.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        if (!template) return res.status(404).json({ error: 'Template not found' });
+        res.json({ success: true, template, message: 'Template updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Delete template (admin) ────────────────────────────────────
+app.delete('/api/templates/:id', adminAuth, async (req, res) => {
+    try {
+        const template = await Template.findByIdAndDelete(req.params.id);
+        if (!template) return res.status(404).json({ error: 'Template not found' });
+        res.json({ success: true, message: 'Template deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ FILE MANAGEMENT ============
+app.post('/api/files/upload', anyAuth, upload.single('file'), async (req, res) => {
+    try {
+        const { taskId, clientId, folder } = req.body;
+        if (!req.file || !taskId || !clientId || !folder) return res.status(400).json({ error: 'Missing required parameters' });
+        
+        let uploaderName = req.user.name || 'System';
+        
+        const fileRecord = await FileAttachment.create({
+            taskId,
+            clientId,
+            originalName: req.file.originalname,
+            filename: req.file.filename,
+            path: req.file.path,
+            folder: folder, // 'input' or 'output'
+            uploadedBy: req.user.id,
+            uploadedByName: uploaderName
+        });
+        res.json({ success: true, file: fileRecord });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/files/task/:taskId', anyAuth, async (req, res) => {
+    try {
+        const files = await FileAttachment.find({ taskId: req.params.taskId }).sort({ createdAt: -1 });
+        res.json({ success: true, files });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/files/download/:id', anyAuth, async (req, res) => {
+    try {
+        const file = await FileAttachment.findById(req.params.id);
+        if (!file) return res.status(404).send('File not found');
+        if (req.user.type === 'client' && file.clientId.toString() !== req.user.id) {
+             return res.status(403).send('Unauthorized');
+        }
+        res.download(file.path, file.originalName);
+    } catch(err) {
+        res.status(500).send(err.message);
+    }
+});
+
+app.delete('/api/files/:id', anyAuth, async (req, res) => {
+    try {
+        const file = await FileAttachment.findById(req.params.id);
+        if(!file) return res.status(404).json({ error: 'Not found' });
+        if (req.user.type === 'client' && file.folder !== 'input') {
+             return res.status(403).json({ error: 'Clients can only delete their own inputs' });
+        }
+        
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        await FileAttachment.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch(err) {
+         res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ CLIENT DASHBOARD ============
+app.get('/api/client/dashboard', anyAuth, async (req, res) => {
+    try {
+        if (req.user.type !== 'client') return res.status(403).json({ error: 'Client access only' });
+        
+        const clientId = req.user.id;
+        
+        const tasks = await Task.find({ clientId: clientId, sendToClient: true }).sort({ updatedAt: -1 });
+        
+        const ads = await Advertisement.find({
+            $or: [
+                { targetClients: { $size: 0 } },
+                { targetClients: clientId }
+            ]
+        }).sort({ createdAt: -1 });
+        
+        res.json({ success: true, tasks, ads });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ ADVERTISEMENTS (Admin Only) ============
+app.post('/api/ads', adminAuth, upload.single('image'), async (req, res) => {
+    try {
+        const { title, targetClients } = req.body;
+        if (!req.file) return res.status(400).json({ error: 'Image required' });
+        
+        let clientsArray = [];
+        if (targetClients) {
+            try { clientsArray = JSON.parse(targetClients); } catch(e){}
+        }
+        
+        const ad = await Advertisement.create({
+            imagePath: '/uploads/' + req.file.filename,
+            title: title || '',
+            targetClients: clientsArray
+        });
+        res.json({ success: true, ad });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/ads', adminAuth, async (req, res) => {
+    try {
+        const ads = await Advertisement.find().populate('targetClients', 'clientName clientCode');
+        res.json({ success: true, ads });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/ads/:id', adminAuth, async (req, res) => {
+    try {
+        const ad = await Advertisement.findById(req.params.id);
+        if(!ad) return res.status(404).json({ error: 'Not found' });
+        
+        const fullPath = path.join(__dirname, 'uploads', path.basename(ad.imagePath));
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        
+        await Advertisement.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ AI AUTO-SCRAPER API ============
+
+app.get('/api/ad/sources', adminAuth, async (req, res) => {
+    try {
+        const sources = await SubsidySource.find().sort({ createdAt: -1 });
+        res.json({ success: true, sources });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/ad/trigger-crawler', adminAuth, async (req, res) => {
+    try {
+        const aiEngine = require('./ai_marketing');
+        await aiEngine.runDailyScrapeAndAuthenticate();
+        res.json({ success: true, message: "Manual crawl triggered successfully." });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/ad/sources', adminAuth, async (req, res) => {
+    try {
+        const { url, title } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL is required' });
+        const src = await SubsidySource.create({ url, title });
+        res.json({ success: true, source: src });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/ad/sources/:id', adminAuth, async (req, res) => {
+    try {
+        await SubsidySource.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/ad/verified-subsidies', adminAuth, async (req, res) => {
+    try {
+        const subsidies = await VerifiedSubsidy.find().sort({ extractedAt: -1 }).limit(50);
+        res.json({ success: true, subsidies });
+    } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ INITIALIZE AI MARKETING ENGINE ============
+try {
+    const aiEngine = require('./ai_marketing');
+    aiEngine.initCronJobs();
+} catch (e) {
+    console.warn("⚠️ Could not load ai_marketing engine:", e.message);
+}
 
 // ============ START SERVER ============
 const PORT = process.env.PORT || 3847;

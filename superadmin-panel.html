@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BookMyCA | Super Admin — Access Control Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; --gold:#C8A951; }
+    *, *::before, *::after { box-sizing:border-box; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .navbar { background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%) !important; }
+    .logo-box { width:40px;height:40px;background:linear-gradient(135deg,#C8A951,#E8D48B);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1.1rem;font-weight:700; }
+    .badge-sa { background:linear-gradient(135deg,#C8A951,#E8D48B);color:#0F172A;font-size:.7rem;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:.05em; }
+
+    .btn-navy { background:var(--navy);color:#fff;border:none;transition:all .2s; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff;transform:translateY(-1px); }
+    .btn-gold { background:linear-gradient(135deg,#C8A951,#E8D48B);color:#0F172A;border:none;font-weight:700;transition:all .2s; }
+    .btn-gold:hover { transform:translateY(-1px);box-shadow:0 4px 12px rgba(200,169,81,.3); }
+
+    /* Info Cards */
+    .info-card { background:#fff;border-radius:14px;border:1px solid var(--border);padding:20px;text-align:center;transition:transform .2s; }
+    .info-card:hover { transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    .info-num { font-size:2rem;font-weight:800;color:var(--navy); }
+    .info-lbl { font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B; }
+
+    /* Tabs */
+    .nav-tabs .nav-link { color:#64748B;font-weight:600;font-size:.875rem;border:none;padding:10px 20px; }
+    .nav-tabs .nav-link.active { color:var(--navy);border-bottom:3px solid var(--navy);background:transparent; }
+    .nav-tabs .nav-link:hover { color:var(--navy); }
+
+    /* Access Matrix Table */
+    .matrix-table { width:100%;border-collapse:collapse;font-size:.82rem; }
+    .matrix-table thead th { background:#F8FAFC;color:#64748B;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 8px;border-bottom:2px solid var(--border);position:sticky;top:0;z-index:2; }
+    .matrix-table tbody td { padding:8px;border-bottom:1px solid var(--border);vertical-align:middle; }
+    .matrix-table tbody tr:hover { background:#F8FAFC; }
+    .matrix-table select { font-size:.8rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff; }
+    .matrix-table select:focus { border-color:var(--accent);outline:none; }
+    .matrix-table .form-check-input { width:16px;height:16px;cursor:pointer; }
+
+    /* Module permission group */
+    .perm-group { display:flex;gap:2px;align-items:center;justify-content:center; }
+    .perm-label { font-size:.6rem;font-weight:700;color:#94A3B8;text-transform:uppercase; }
+    .perm-cb-wrap { display:flex;flex-direction:column;align-items:center;gap:1px; }
+
+    /* Department Work Items */
+    .dept-card { background:#fff;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:12px;transition:all .2s; }
+    .dept-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.06); }
+    .dept-card h6 { font-weight:700;color:var(--navy);margin-bottom:8px; }
+    .work-item { display:inline-flex;align-items:center;background:#EFF6FF;color:#2563EB;border:1px solid #BFDBFE;padding:3px 10px;border-radius:6px;font-size:.75rem;font-weight:600;margin:2px; }
+    .work-item .remove-wi { cursor:pointer;margin-left:6px;color:#DC2626;font-weight:700; }
+
+    /* Scrollable table */
+    .matrix-scroll { max-height:65vh;overflow:auto;border:1px solid var(--border);border-radius:12px;background:#fff; }
+
+    .form-control,.form-select { border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.85rem; }
+    .form-control:focus,.form-select:focus { border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.1); }
+
+    .saving-indicator { display:none;position:fixed;top:20px;right:20px;background:var(--navy);color:#38BDF8;padding:10px 20px;border-radius:10px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2); }
+    .saving-indicator.show { display:block;animation:fadeIn .3s; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+
+    @media(max-width:768px){
+      .matrix-table { font-size:.72rem; }
+      .matrix-table select { font-size:.72rem;padding:2px 4px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Saving indicator -->
+<div id="savingIndicator" class="saving-indicator"><i class="fa-solid fa-spinner fa-spin me-2"></i>Saving…</div>
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-expand-lg navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-shield-halved"></i></div>
+      <span class="fw-bold fs-5">BookMyCA <span class="text-white-50 fw-light">Super Admin</span></span>
+    </a>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge-sa"><i class="fa-solid fa-crown me-1"></i>SUPER ADMIN</span>
+      <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-house me-1"></i>Hub</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+
+  <!-- Access Denied Message (shown to non-superadmin) -->
+  <div id="accessDenied" style="display:none;" class="text-center py-5">
+    <i class="fa-solid fa-lock fa-3x text-danger mb-3"></i>
+    <h3 class="fw-bold text-danger">Access Denied</h3>
+    <p class="text-muted">This panel is restricted to the Super Admin only.</p>
+    <a href="index.html" class="btn btn-navy mt-3"><i class="fa-solid fa-arrow-left me-2"></i>Back to Hub</a>
+  </div>
+
+  <!-- Main Content (shown to superadmin) -->
+  <div id="mainContent" style="display:none;">
+
+    <!-- Info Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="info-card">
+          <div class="info-num" id="stat-employees">0</div>
+          <div class="info-lbl">Total Employees</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="info-card">
+          <div class="info-num" id="stat-depts" style="color:#2563EB">0</div>
+          <div class="info-lbl">Active Depts</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="info-card">
+          <div class="info-num" id="stat-admins" style="color:#059669">0</div>
+          <div class="info-lbl">Team Admins</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="info-card">
+          <div class="info-num" id="stat-heads" style="color:#C8A951">0</div>
+          <div class="info-lbl">Dept Heads</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+      <li class="nav-item">
+        <button class="nav-link active" onclick="switchPanelTab('access')"><i class="fa-solid fa-user-shield me-1"></i>Employee Access Matrix</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" onclick="switchPanelTab('workitems')"><i class="fa-solid fa-list-check me-1"></i>Dept Work Items</button>
+      </li>
+    </ul>
+
+    <!-- TAB: ACCESS MATRIX -->
+    <div id="tab-access">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <input type="text" class="form-control" id="searchEmp" placeholder="Search employee…" style="width:240px;" oninput="filterMatrix()">
+          <select class="form-select" id="filterDept" style="width:200px;" onchange="filterMatrix()">
+            <option value="">All Departments</option>
+          </select>
+        </div>
+        <button class="btn btn-gold px-4" onclick="saveAllAccess()">
+          <i class="fa-solid fa-save me-2"></i>Save All Changes
+        </button>
+      </div>
+
+      <div class="matrix-scroll">
+        <table class="matrix-table" id="matrixTable">
+          <thead>
+            <tr>
+              <th style="min-width:160px">Employee</th>
+              <th style="min-width:190px">Department</th>
+              <th style="min-width:130px">Position</th>
+              <th style="min-width:60px">Team Admin</th>
+              <th>Client Master<br><span class="perm-label">R W E</span></th>
+              <th>Admin Tasks<br><span class="perm-label">R W E</span></th>
+              <th>Task Portal<br><span class="perm-label">R W E</span></th>
+              <th>Invoice Builder<br><span class="perm-label">R W E</span></th>
+              <th>Reports<br><span class="perm-label">R W E</span></th>
+              <th>Agreement<br><span class="perm-label">R W E</span></th>
+              <th>Template<br><span class="perm-label">R W E</span></th>
+              <th>Ad Master<br><span class="perm-label">R W E</span></th>
+              <th>Attendance<br><span class="perm-label">R W E</span></th>
+              <th style="min-width:60px">Can Assign Task</th>
+              <th style="min-width:60px">Can Upload Output</th>
+            </tr>
+          </thead>
+          <tbody id="matrixBody">
+            <tr><td colspan="15" class="text-center py-4 text-muted"><div class="spinner-border text-primary"></div><br>Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: DEPT WORK ITEMS -->
+    <div id="tab-workitems" style="display:none;">
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <div class="card border-0 shadow-sm" style="border-radius:14px;">
+            <div class="card-body">
+              <h6 class="fw-bold mb-3"><i class="fa-solid fa-building me-2 text-primary"></i>Departments</h6>
+              <div id="deptList" class="d-grid gap-2">
+                <!-- filled dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-8 mb-3">
+          <div class="card border-0 shadow-sm" style="border-radius:14px;">
+            <div class="card-body">
+              <h6 class="fw-bold mb-3" id="wiTitle"><i class="fa-solid fa-list-check me-2 text-success"></i>Select a Department</h6>
+              <p class="text-muted small" id="wiSubtitle">Click a department from the left to manage its work items.</p>
+              <div id="wiContainer" style="display:none;">
+                <div class="d-flex gap-2 mb-3">
+                  <input type="text" class="form-control" id="newWorkItem" placeholder="Add new work type…">
+                  <button class="btn btn-navy" onclick="addWorkItem()" style="white-space:nowrap"><i class="fa-solid fa-plus me-1"></i>Add</button>
+                </div>
+                <div id="wiItems" class="d-flex flex-wrap gap-1 mb-3"></div>
+                <button class="btn btn-gold btn-sm" onclick="saveWorkItems()"><i class="fa-solid fa-save me-1"></i>Save Work Items</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="sidebar.js"></script>
+
+<script>
+const API = '';
+const MODULE_KEYS = ['client-master','admin-tasks','task-portal','invoice-builder','reports','agreement-builder','template-master','ad-master','attendance'];
+let token = '', employees = [], departments = [], deptWorkData = {};
+let selectedDept = '';
+
+// ── Boot ──
+window.addEventListener('DOMContentLoaded', async () => {
+  const u = JSON.parse(localStorage.getItem('sa_user') || '{}');
+  token = localStorage.getItem('sa_token');
+  if (!token || u.role !== 'superadmin') {
+    document.getElementById('accessDenied').style.display = 'block';
+    return;
+  }
+  document.getElementById('mainContent').style.display = 'block';
+
+  try {
+    const r = await fetch(`${API}/api/departments`, { headers: { Authorization: 'Bearer ' + token }});
+    const d = await r.json();
+    departments = d.departments || [];
+    const sel = document.getElementById('filterDept');
+    departments.forEach(dept => {
+      sel.innerHTML += `<option value="${dept}">${dept}</option>`;
+    });
+  } catch(e) { console.error(e); }
+
+  await loadEmployees();
+  await loadDeptWorkData();
+  renderDeptList();
+});
+
+async function loadEmployees() {
+  try {
+    const r = await fetch(`${API}/api/superadmin/employees`, { headers: { Authorization: 'Bearer ' + token }});
+    const d = await r.json();
+    employees = d.employees || [];
+    renderMatrix();
+    renderStats();
+  } catch(e) { console.error(e); }
+}
+
+async function loadDeptWorkData() {
+  try {
+    const r = await fetch(`${API}/api/superadmin/dept-work`, { headers: { Authorization: 'Bearer ' + token }});
+    const d = await r.json();
+    deptWorkData = {};
+    (d.lists || []).forEach(l => { deptWorkData[l.department] = l.workItems || []; });
+  } catch(e) { console.error(e); }
+}
+
+// Helper: get departments array for an employee
+function getEmpDepts(emp) {
+  if (Array.isArray(emp.department) && emp.department.length > 0) return emp.department;
+  if (typeof emp.department === 'string' && emp.department) return [emp.department];
+  if (emp.dept) return [emp.dept];
+  return [];
+}
+
+function renderStats() {
+  document.getElementById('stat-employees').textContent = employees.length;
+  const activeDepts = new Set();
+  employees.forEach(e => getEmpDepts(e).forEach(d => activeDepts.add(d)));
+  document.getElementById('stat-depts').textContent = activeDepts.size;
+  document.getElementById('stat-admins').textContent = employees.filter(e => e.isTeamAdmin).length;
+  document.getElementById('stat-heads').textContent = employees.filter(e => e.position === 'Head').length;
+}
+
+function renderMatrix() {
+  const body = document.getElementById('matrixBody');
+  if (!employees.length) {
+    body.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-muted">No employees found.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = employees.map((emp, idx) => {
+    const modules = emp.permissions?.modules || [];
+    const getModPerm = (key) => modules.find(m => m.name === key) || { read: false, write: false, edit: false };
+    const empDepts = getEmpDepts(emp);
+    const deptDisplay = empDepts.length > 0
+      ? empDepts.map(d => `<span class="badge bg-primary text-white me-1 mb-1" style="font-size:.65rem">${d}</span>`).join('')
+      : '<span class="text-muted small">No dept</span>';
+
+    let row = `<tr data-id="${emp._id}" data-name="${emp.name.toLowerCase()}" data-dept="${empDepts.join(',').toLowerCase()}">`;
+    // Name
+    row += `<td><strong class="text-dark">${emp.name}</strong><br><span class="text-muted" style="font-size:.72rem">${emp.code} · ${emp.email}</span></td>`;
+    // Department — click to open multi-select popup
+    row += `<td style="min-width:200px;"><div class="dept-tags" id="dept-tags-${idx}">${deptDisplay}</div>
+      <button class="btn btn-sm btn-outline-primary mt-1" style="font-size:.7rem;padding:2px 8px;" onclick="openDeptPicker(${idx})"><i class="fa-solid fa-pen me-1"></i>Edit Depts</button>
+      <input type="hidden" class="dept-val" data-idx="${idx}" value='${JSON.stringify(empDepts)}'>
+    </td>`;
+    // Position dropdown
+    row += `<td><select class="pos-sel" data-idx="${idx}" onchange="markDirty(this)">`;
+    ['Head', 'Sub Head', 'Co Head', 'Member'].forEach(p => {
+      row += `<option value="${p}" ${emp.position === p ? 'selected' : ''}>${p}</option>`;
+    });
+    row += '</select></td>';
+    // Team Admin toggle
+    row += `<td class="text-center"><input type="checkbox" class="form-check-input ta-cb" data-idx="${idx}" ${emp.isTeamAdmin ? 'checked' : ''} onchange="markDirty(this)"></td>`;
+    // Module permissions (9 modules)
+    MODULE_KEYS.forEach(key => {
+      const p = getModPerm(key);
+      row += `<td><div class="perm-group">`;
+      row += `<input type="checkbox" class="form-check-input mod-r" data-module="${key}" data-idx="${idx}" ${p.read ? 'checked' : ''} title="Read" onchange="markDirty(this)">`;
+      row += `<input type="checkbox" class="form-check-input mod-w" data-module="${key}" data-idx="${idx}" ${p.write ? 'checked' : ''} title="Write" onchange="markDirty(this)">`;
+      row += `<input type="checkbox" class="form-check-input mod-e" data-module="${key}" data-idx="${idx}" ${p.edit ? 'checked' : ''} title="Edit" onchange="markDirty(this)">`;
+      row += '</div></td>';
+    });
+    // Can Assign Task
+    row += `<td class="text-center"><input type="checkbox" class="form-check-input cat-cb" data-idx="${idx}" ${emp.permissions?.canAssignTask ? 'checked' : ''} onchange="markDirty(this)"></td>`;
+    // Can Upload Output
+    row += `<td class="text-center"><input type="checkbox" class="form-check-input cuo-cb" data-idx="${idx}" ${emp.permissions?.canUploadOutput !== false ? 'checked' : ''} onchange="markDirty(this)"></td>`;
+    row += '</tr>';
+    return row;
+  }).join('');
+}
+
+// ── Multi-department Picker Popup ──
+async function openDeptPicker(idx) {
+  const hiddenInput = document.querySelector(`.dept-val[data-idx="${idx}"]`);
+  let currentDepts = [];
+  try { currentDepts = JSON.parse(hiddenInput.value || '[]'); } catch(e) {}
+
+  const deptCheckboxes = departments.map(d => {
+    const checked = currentDepts.includes(d) ? 'checked' : '';
+    return `<div class="form-check"><input class="form-check-input dept-pick-cb" type="checkbox" value="${d}" ${checked} id="dpk-${d.replace(/[^a-zA-Z0-9]/g,'')}"><label class="form-check-label small" for="dpk-${d.replace(/[^a-zA-Z0-9]/g,'')}">${d}</label></div>`;
+  }).join('');
+
+  const { isConfirmed } = await Swal.fire({
+    title: 'Select Departments',
+    html: `<div style="text-align:left;max-height:350px;overflow:auto;">${deptCheckboxes}</div>`,
+    confirmButtonText: 'Apply',
+    confirmButtonColor: '#0F172A',
+    showCancelButton: true,
+    preConfirm: () => {
+      const selected = [];
+      document.querySelectorAll('.dept-pick-cb:checked').forEach(cb => selected.push(cb.value));
+      return selected;
+    }
+  });
+
+  if (isConfirmed) {
+    const selected = Swal.getPopup().querySelectorAll ? [] : [];
+    // Get from preConfirm result
+    const result = Swal.getPopup()?.querySelectorAll('.dept-pick-cb:checked');
+    const selectedDepts = [];
+    if (result) result.forEach(cb => selectedDepts.push(cb.value));
+    
+    hiddenInput.value = JSON.stringify(selectedDepts);
+    // Update display
+    const tagsDiv = document.getElementById(`dept-tags-${idx}`);
+    tagsDiv.innerHTML = selectedDepts.length > 0
+      ? selectedDepts.map(d => `<span class="badge bg-primary text-white me-1 mb-1" style="font-size:.65rem">${d}</span>`).join('')
+      : '<span class="text-muted small">No dept</span>';
+    markDirty(hiddenInput.closest ? hiddenInput : tagsDiv);
+  }
+}
+
+function markDirty(el) {
+  const tr = el.closest ? el.closest('tr') : el.parentElement?.closest('tr');
+  if (tr) tr.style.background = '#FFFBEB';
+}
+
+function filterMatrix() {
+  const search = document.getElementById('searchEmp').value.toLowerCase();
+  const dept = document.getElementById('filterDept').value.toLowerCase();
+  document.querySelectorAll('#matrixBody tr').forEach(tr => {
+    const name = tr.dataset.name || '';
+    const tdept = tr.dataset.dept || '';
+    const matchName = !search || name.includes(search);
+    const matchDept = !dept || tdept.includes(dept);
+    tr.style.display = matchName && matchDept ? '' : 'none';
+  });
+}
+
+async function saveAllAccess() {
+  const indicator = document.getElementById('savingIndicator');
+  indicator.classList.add('show');
+
+  const updates = [];
+  document.querySelectorAll('#matrixBody tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    let department = [];
+    try { department = JSON.parse(tr.querySelector('.dept-val')?.value || '[]'); } catch(e) {}
+    const position = tr.querySelector('.pos-sel')?.value || 'Member';
+    const isTeamAdmin = tr.querySelector('.ta-cb')?.checked || false;
+    const canAssignTask = tr.querySelector('.cat-cb')?.checked || false;
+    const canUploadOutput = tr.querySelector('.cuo-cb')?.checked !== false;
+
+    const modules = [];
+    MODULE_KEYS.forEach(key => {
+      const r = tr.querySelector(`.mod-r[data-module="${key}"]`)?.checked || false;
+      const w = tr.querySelector(`.mod-w[data-module="${key}"]`)?.checked || false;
+      const e = tr.querySelector(`.mod-e[data-module="${key}"]`)?.checked || false;
+      modules.push({ name: key, read: r, write: w, edit: e });
+    });
+
+    updates.push({ id, department, position, isTeamAdmin, permissions: { modules, canAssignTask, canUploadOutput } });
+  });
+
+  try {
+    const r = await fetch(`${API}/api/superadmin/employees/bulk-access`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ updates })
+    });
+    const d = await r.json();
+    if (d.success) {
+      Swal.fire({ title: 'Saved!', text: `${d.updated} employees updated.`, icon: 'success', confirmButtonColor: '#0F172A' });
+      document.querySelectorAll('#matrixBody tr').forEach(tr => tr.style.background = '');
+      await loadEmployees();
+    } else {
+      Swal.fire('Error', d.error || 'Save failed', 'error');
+    }
+  } catch(e) {
+    Swal.fire('Error', 'Server unreachable', 'error');
+  } finally {
+    indicator.classList.remove('show');
+  }
+}
+
+// ── Tab Switching ──
+function switchPanelTab(tab) {
+  document.querySelectorAll('.nav-tabs .nav-link').forEach((el, i) => {
+    el.classList.toggle('active', i === (tab === 'access' ? 0 : 1));
+  });
+  document.getElementById('tab-access').style.display = tab === 'access' ? '' : 'none';
+  document.getElementById('tab-workitems').style.display = tab === 'workitems' ? '' : 'none';
+}
+
+// ── Dept Work Items ──
+function renderDeptList() {
+  const container = document.getElementById('deptList');
+  container.innerHTML = departments.map(d => {
+    const count = (deptWorkData[d] || []).length;
+    return `<button class="btn btn-sm ${selectedDept === d ? 'btn-navy' : 'btn-outline-secondary'} text-start d-flex justify-content-between align-items-center" onclick="selectDept('${d}')">
+      <span>${d}</span><span class="badge bg-light text-dark">${count}</span>
+    </button>`;
+  }).join('');
+}
+
+function selectDept(dept) {
+  selectedDept = dept;
+  renderDeptList();
+  document.getElementById('wiTitle').innerHTML = `<i class="fa-solid fa-list-check me-2 text-success"></i>${dept}`;
+  document.getElementById('wiSubtitle').textContent = 'Manage work types for this department.';
+  document.getElementById('wiContainer').style.display = 'block';
+  renderWorkItems();
+}
+
+function renderWorkItems() {
+  const items = deptWorkData[selectedDept] || [];
+  document.getElementById('wiItems').innerHTML = items.map((item, i) =>
+    `<span class="work-item">${item}<span class="remove-wi" onclick="removeWorkItem(${i})">×</span></span>`
+  ).join('') || '<span class="text-muted small">No work items yet. Add one above.</span>';
+}
+
+function addWorkItem() {
+  const input = document.getElementById('newWorkItem');
+  const val = input.value.trim();
+  if (!val || !selectedDept) return;
+  if (!deptWorkData[selectedDept]) deptWorkData[selectedDept] = [];
+  if (deptWorkData[selectedDept].includes(val)) { input.value = ''; return; }
+  deptWorkData[selectedDept].push(val);
+  input.value = '';
+  renderWorkItems();
+  renderDeptList();
+}
+
+function removeWorkItem(idx) {
+  if (!selectedDept) return;
+  deptWorkData[selectedDept].splice(idx, 1);
+  renderWorkItems();
+  renderDeptList();
+}
+
+async function saveWorkItems() {
+  if (!selectedDept) return;
+  try {
+    const r = await fetch(`${API}/api/superadmin/dept-work/${encodeURIComponent(selectedDept)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ workItems: deptWorkData[selectedDept] || [] })
+    });
+    const d = await r.json();
+    if (d.success) {
+      Swal.fire({ title: 'Saved!', text: `Work items for "${selectedDept}" updated.`, icon: 'success', confirmButtonColor: '#0F172A', timer: 1500 });
+    } else {
+      Swal.fire('Error', d.error || 'Save failed', 'error');
+    }
+  } catch(e) {
+    Swal.fire('Error', 'Server unreachable', 'error');
+  }
+}
+</script>
+</body>
+</html>

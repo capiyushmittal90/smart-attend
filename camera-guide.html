@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BookMyCA | Camera Permission Guide</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root { --navy:#0F172A; --navy-h:#1E293B; --accent:#38BDF8; --bg:#F1F5F9; --border:#E2E8F0; --success:#10B981; --warn:#F59E0B; --danger:#EF4444; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; margin:0; }
+    .navbar { background:var(--navy)!important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+    .btn-navy { background:var(--navy);color:#fff;border:none;transition:all .2s; }
+    .btn-navy:hover { background:var(--navy-h);color:#fff;transform:translateY(-1px); }
+    
+    .hero-section {
+      background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%);
+      color: white;
+      padding: 48px 20px 40px;
+      text-align: center;
+    }
+    .hero-section h1 { font-weight: 800; font-size: 2.2rem; margin-bottom: 12px; }
+    .hero-section p { color: #94A3B8; font-size: 1rem; max-width: 600px; margin: 0 auto; }
+    .hero-badge { display:inline-block; background:#38BDF8; color:#0F172A; font-weight:700; padding:4px 14px; border-radius:20px; font-size:.8rem; margin-bottom:16px; }
+    
+    .guide-container { max-width: 900px; margin: -30px auto 40px; padding: 0 16px; position:relative; z-index:2; }
+    
+    .guide-card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+    .guide-card h2 { font-weight: 700; font-size: 1.4rem; color: var(--navy); margin-bottom: 8px; }
+    .guide-card h3 { font-weight: 600; font-size: 1.1rem; color: var(--navy); margin-top: 20px; margin-bottom: 12px; }
+    
+    .os-tab-bar { display: flex; gap: 8px; margin-bottom: 24px; }
+    .os-tab { padding: 10px 24px; border-radius: 10px; border: 2px solid var(--border); background: #fff; font-weight: 600; cursor: pointer; transition: all .2s; font-size:.9rem; }
+    .os-tab:hover { border-color: var(--accent); }
+    .os-tab.active { background: var(--accent); color: var(--navy); border-color: var(--accent); }
+    
+    .os-panel { display: none; }
+    .os-panel.active { display: block; }
+    
+    .step-card {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      padding: 16px 20px;
+      background: #F8FAFC;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      border-left: 4px solid var(--accent);
+    }
+    .step-num {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      color: var(--navy);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 1rem;
+      flex-shrink: 0;
+    }
+    .step-content h4 { font-weight: 600; font-size: 1rem; margin: 0 0 4px 0; color: var(--navy); }
+    .step-content p { font-size: .88rem; color: #64748B; margin: 0; line-height: 1.5; }
+    .step-content code { background: #E2E8F0; padding: 2px 8px; border-radius: 4px; font-size: .82rem; }
+    
+    .guide-image { width: 100%; max-width: 500px; border-radius: 12px; margin: 20px auto; display: block; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+    
+    .note-box { background: #FFFBEB; border-left: 4px solid var(--warn); padding: 14px 18px; border-radius: 8px; font-size: .88rem; margin: 16px 0; }
+    .note-box.danger { background: #FEF2F2; border-color: var(--danger); }
+    .note-box.success { background: #ECFDF5; border-color: var(--success); }
+    
+    .alt-method { background: linear-gradient(135deg, #EFF6FF, #DBEAFE); border-radius: 14px; padding: 24px; margin-top: 20px; }
+    .alt-method h3 { color: #1E40AF; }
+    
+    .faq-item { border-bottom: 1px solid var(--border); padding: 14px 0; }
+    .faq-item:last-child { border: none; }
+    .faq-q { font-weight: 600; color: var(--navy); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .faq-a { color: #64748B; font-size: .9rem; margin-top: 8px; line-height: 1.6; display: none; }
+    .faq-item.open .faq-a { display: block; }
+    .faq-item.open .faq-q::after { content: '−'; }
+    .faq-q::after { content: '+'; font-size: 1.2rem; color: var(--accent); }
+
+    .download-bar {
+      display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-camera"></i></div>
+      <span class="fw-bold fs-5">BookMyCA <span class="text-white-50 fw-light">Camera Guide</span></span>
+    </a>
+    <div class="d-flex gap-2">
+      <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-shield-halved me-1"></i>Hub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero-section">
+  <span class="hero-badge">📷 STAFF GUIDE</span>
+  <h1>Camera Permission Guide</h1>
+  <p>Follow these simple steps to allow camera access on your phone for seamless attendance check-in. Takes less than 1 minute!</p>
+</div>
+
+<div class="guide-container">
+
+  <!-- Quick Fix -->
+  <div class="guide-card">
+    <h2>⚡ Quick Fix — Try This First!</h2>
+    <p style="font-size:.95rem;color:#475569;margin-bottom:16px;">Before going through the full steps, try these quick fixes:</p>
+    
+    <div class="step-card" style="border-left-color:#10B981;">
+      <div class="step-num" style="background:#10B981;color:#fff;">1</div>
+      <div class="step-content">
+        <h4>Look for the Camera Popup</h4>
+        <p>When you click "Check-In", your browser will show a popup asking <strong>"Allow camera access?"</strong>. Tap <strong>"Allow"</strong>.</p>
+      </div>
+    </div>
+    <div class="step-card" style="border-left-color:#10B981;">
+      <div class="step-num" style="background:#10B981;color:#fff;">2</div>
+      <div class="step-content">
+        <h4>If You Accidentally Blocked It</h4>
+        <p>Tap the <strong>lock icon 🔒</strong> (or <strong>ⓘ</strong>) in your browser's address bar → Find <strong>"Camera"</strong> → Change to <strong>"Allow"</strong> → Reload the page.</p>
+      </div>
+    </div>
+    <div class="step-card" style="border-left-color:#10B981;">
+      <div class="step-num" style="background:#10B981;color:#fff;">3</div>
+      <div class="step-content">
+        <h4>Close Other Camera Apps</h4>
+        <p>If another app (WhatsApp Video, Instagram, etc.) is using the camera, close it first, then try again.</p>
+      </div>
+    </div>
+    
+    <div class="note-box success">
+      ✅ <strong>Still not working?</strong> Follow the detailed steps below for your phone type (Android or iPhone).
+    </div>
+  </div>
+
+  <!-- Detailed Guides -->
+  <div class="guide-card">
+    <h2>📱 Detailed Steps by Phone Type</h2>
+    
+    <div class="os-tab-bar" id="osTabBar">
+      <button class="os-tab active" onclick="switchOS('android')"><i class="fa-brands fa-android me-1"></i> Android (Chrome)</button>
+      <button class="os-tab" onclick="switchOS('iphone')"><i class="fa-brands fa-apple me-1"></i> iPhone (Safari)</button>
+      <button class="os-tab" onclick="switchOS('desktop')"><i class="fa-solid fa-laptop me-1"></i> Desktop / Laptop</button>
+    </div>
+    
+    <!-- Android Panel -->
+    <div class="os-panel active" id="panel-android">
+      <h3>🤖 Android Phone — Google Chrome</h3>
+      <img src="android-guide.png" alt="Android Chrome Camera Permission Steps" class="guide-image">
+      
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h4>Open Chrome Browser</h4>
+          <p>Open Google Chrome on your Android phone. Tap the <strong>three dots (⋮)</strong> menu at the top-right corner.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h4>Go to Settings → Site Settings</h4>
+          <p>In the menu, tap <code>Settings</code> → Scroll down and tap <code>Site Settings</code>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h4>Find Camera Option</h4>
+          <p>Inside Site Settings, find and tap <code>Camera</code>. You will see the camera permission toggle.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h4>Allow Camera Access</h4>
+          <p>Make sure the toggle is <strong>ON</strong> (blue). If our website is listed under "Blocked", tap on it and change to <strong>"Allow"</strong>.</p>
+        </div>
+      </div>
+      
+      <div class="note-box">
+        ⚠️ <strong>Also check:</strong> Go to your phone's <strong>Settings → Apps → Chrome → Permissions → Camera → Allow</strong>. Sometimes the app-level permission needs to be enabled separately.
+      </div>
+    </div>
+    
+    <!-- iPhone Panel -->
+    <div class="os-panel" id="panel-iphone">
+      <h3>🍎 iPhone — Safari Browser</h3>
+      <img src="iphone-guide.png" alt="iPhone Safari Camera Permission Steps" class="guide-image">
+      
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h4>Open iPhone Settings</h4>
+          <p>Go to your iPhone's home screen and open the <strong>Settings</strong> app (⚙️ gear icon).</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h4>Find Safari</h4>
+          <p>Scroll down in Settings and tap <code>Safari</code>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h4>Open Camera Settings</h4>
+          <p>Scroll down in Safari settings to find <strong>"Settings for Websites"</strong> section. Tap <code>Camera</code>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h4>Select "Allow"</h4>
+          <p>Change the camera setting to <strong>"Allow"</strong>. This will let Safari access your camera for attendance photo.</p>
+        </div>
+      </div>
+      
+      <div class="note-box">
+        ⚠️ <strong>Using Chrome on iPhone?</strong> Go to <strong>Settings → Chrome → Camera → Allow</strong>.
+      </div>
+    </div>
+    
+    <!-- Desktop Panel -->
+    <div class="os-panel" id="panel-desktop">
+      <h3>💻 Desktop / Laptop — Chrome Browser</h3>
+      
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h4>Click the Lock/Info Icon</h4>
+          <p>In Chrome's address bar, click the <strong>lock icon (🔒)</strong> or <strong>ⓘ icon</strong> on the left side of the URL.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h4>Find Camera Permission</h4>
+          <p>A dropdown will appear. Find <strong>"Camera"</strong> in the list of permissions.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h4>Change to "Allow"</h4>
+          <p>Click the dropdown next to Camera and select <strong>"Allow"</strong>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h4>Reload the Page</h4>
+          <p>Refresh the page by pressing <code>Ctrl + R</code> (or <code>Cmd + R</code> on Mac). Now try checking in again.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alternative Method -->
+  <div class="guide-card">
+    <div class="alt-method">
+      <h3>🌐 Alternative: Web Check-In (No Camera Needed)</h3>
+      <p style="color:#1E40AF;font-size:.95rem;line-height:1.6;">
+        If your camera is still not working, you can use the <strong>"🌐 Web Check-In"</strong> button on your Employee Dashboard.
+        This will mark your attendance <strong>without a photo</strong>, using your IP address for location verification.
+      </p>
+      <div class="note-box danger">
+        ⚠️ <strong>Important:</strong> Web Check-In is only for emergency use when the camera is not functioning. Your admin can see which check-ins were done via web vs camera. Always try camera check-in first.
+      </div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="guide-card">
+    <h2>❓ Frequently Asked Questions</h2>
+    
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">Why does the app need my camera?</div>
+      <div class="faq-a">The camera captures your photo during check-in/check-out to verify your identity and prevent proxy attendance. Your photo is securely stored and only visible to you and your admin.</div>
+    </div>
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">I allowed the camera but it's still showing black screen</div>
+      <div class="faq-a">Try these: 1) Close all other apps using the camera (WhatsApp video, Instagram). 2) Restart your browser. 3) Restart your phone. 4) Clear browser cache: Settings → Chrome → Clear Data.</div>
+    </div>
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">My phone says "No camera found"</div>
+      <div class="faq-a">Some older phones or budget phones may have camera compatibility issues with web browsers. In this case, use the "🌐 Web Check-In" button from your dashboard sidebar as an alternative.</div>
+    </div>
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">Is my location tracked during check-in?</div>
+      <div class="faq-a">Yes, your GPS location (or IP-based location) is captured along with your photo for attendance records. This helps verify you are at the office or an approved work location.</div>
+    </div>
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">Can I check in from home using Web Check-In?</div>
+      <div class="faq-a">Web Check-In logs your IP address and approximate location. Your admin can see this data. Using it from an unauthorized location without approval may be flagged.</div>
+    </div>
+  </div>
+
+  <!-- Download PDF -->
+  <div class="download-bar">
+    <button class="btn btn-navy px-4 py-2 fw-semibold" onclick="downloadGuidePDF()">
+      <i class="fa-solid fa-download me-2"></i>Download as PDF
+    </button>
+    <a href="index.html" class="btn btn-outline-secondary px-4 py-2 fw-semibold">
+      <i class="fa-solid fa-arrow-left me-2"></i>Back to App
+    </a>
+  </div>
+</div>
+
+<script>
+function switchOS(os) {
+  document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.os-panel').forEach(p => p.classList.remove('active'));
+  event.target.closest('.os-tab').classList.add('active');
+  document.getElementById('panel-' + os).classList.add('active');
+}
+
+function downloadGuidePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pw = doc.internal.pageSize.getWidth();
+  const m = 18; let y = 20;
+
+  // Header
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, pw, 28, 'F');
+  doc.setFillColor(56, 189, 248);
+  doc.rect(0, 28, pw, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('BookMyCA Smart Attend', pw/2, 12, {align:'center'});
+  doc.setFontSize(12);
+  doc.text('Camera Permission Guide for Staff', pw/2, 22, {align:'center'});
+  y = 38;
+
+  doc.setTextColor(50,50,50);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('This guide will help you enable camera permission on your phone for attendance check-in.', m, y);
+  y += 10;
+
+  // Quick Fix
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Quick Fix — Try This First!', m, y); y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  const quickSteps = [
+    '1. When you click "Check-In", your browser shows a popup asking "Allow camera?". Tap "Allow".',
+    '2. If blocked: Tap the lock icon in address bar → Camera → Allow → Reload page.',
+    '3. Close other camera apps (WhatsApp Video, Instagram etc.) and try again.'
+  ];
+  quickSteps.forEach(s => { doc.text(s, m+4, y); y += 6; });
+  y += 6;
+
+  // Android Steps
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Android Phone — Google Chrome', m, y); y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  const androidSteps = [
+    'Step 1: Open Chrome → Tap 3-dot menu (⋮) at top-right.',
+    'Step 2: Tap "Settings" → "Site Settings".',
+    'Step 3: Find and tap "Camera".',
+    'Step 4: Toggle ON. If website is blocked, tap it → change to "Allow".',
+    '',
+    'Also check: Phone Settings → Apps → Chrome → Permissions → Camera → Allow'
+  ];
+  androidSteps.forEach(s => { doc.text(s, m+4, y); y += 6; });
+  y += 6;
+
+  // iPhone Steps
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('iPhone — Safari Browser', m, y); y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  const iphoneSteps = [
+    'Step 1: Open iPhone Settings (gear icon).',
+    'Step 2: Scroll down → tap "Safari".',
+    'Step 3: Under "Settings for Websites" → tap "Camera".',
+    'Step 4: Select "Allow".',
+    '',
+    'Using Chrome on iPhone? Go to Settings → Chrome → Camera → Allow'
+  ];
+  iphoneSteps.forEach(s => { doc.text(s, m+4, y); y += 6; });
+  y += 6;
+
+  // Desktop Steps
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Desktop / Laptop — Chrome Browser', m, y); y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  const desktopSteps = [
+    'Step 1: Click the lock icon in the address bar (left side of URL).',
+    'Step 2: Find "Camera" in the permissions list.',
+    'Step 3: Change to "Allow".',
+    'Step 4: Reload the page (Ctrl+R or Cmd+R).'
+  ];
+  desktopSteps.forEach(s => { doc.text(s, m+4, y); y += 6; });
+  y += 8;
+
+  // Alternative
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Alternative: Web Check-In (No Camera)', m, y); y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  const altLines = doc.splitTextToSize('If camera still doesn\'t work, use the "Web Check-In" button on your Employee Dashboard. This marks attendance without photo, using your IP address. This is only for emergency use — always try camera check-in first. Admin can see which check-ins were done via web.', 170);
+  doc.text(altLines, m+4, y); y += altLines.length * 5 + 6;
+
+  // FAQ
+  if (y > 240) { doc.addPage(); y = 20; }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Frequently Asked Questions', m, y); y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(60,60,60);
+  const faqs = [
+    ['Q: Why does the app need my camera?', 'A: To capture your photo for identity verification and prevent proxy attendance.'],
+    ['Q: Camera shows black screen?', 'A: Close all camera apps, restart browser, or restart phone.'],
+    ['Q: Can I use Web Check-In from home?', 'A: Your IP/location is logged. Using from unauthorized locations may be flagged by admin.']
+  ];
+  faqs.forEach(([q,a]) => {
+    if (y > 270) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'bold');
+    doc.text(q, m+4, y); y += 5;
+    doc.setFont('helvetica', 'normal');
+    const aLines = doc.splitTextToSize(a, 165);
+    doc.text(aLines, m+4, y); y += aLines.length * 5 + 4;
+  });
+
+  // Footer
+  doc.setFontSize(8);
+  doc.setTextColor(150,150,150);
+  doc.text('BookMyCA Smart Attend — Camera Permission Guide | Generated: ' + new Date().toLocaleDateString('en-IN'), pw/2, doc.internal.pageSize.getHeight() - 6, {align:'center'});
+
+  doc.save('BookMyCA_Camera_Permission_Guide.pdf');
+}
+</script>
+
+</body>
+</html>

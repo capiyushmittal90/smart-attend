@@ -74,6 +74,15 @@
       <div class="builder-card">
         <p class="section-title"><i class="fa-solid fa-sliders me-1"></i>Invoice Type & Client</p>
         <div class="row g-3">
+          <div class="col-md-12 mb-1">
+            <label class="form-label fw-semibold small text-muted">Service Provider Firm</label>
+            <select class="form-select border-primary" id="firmSelect" onchange="onFirmChange()">
+              <option value="avpm">AVPM & Associates</option>
+              <option value="bmc">Book My CA (A Unit of Aayu Consulting Group)</option>
+              <option value="aayu">Aayu Consulting Group Private Limited</option>
+              <option value="huf">Piyush Mittal HUF</option>
+            </select>
+          </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold small text-muted">Invoice Type</label>
             <select class="form-select" id="invType" onchange="updateGST()">
@@ -173,6 +182,13 @@ const API = '';
 const INR = n => '₹' + Number(n||0).toLocaleString('en-IN');
 let token = '', clientList = [], selectedClient = null, taskData = null;
 
+const FIRMS = {
+  avpm: { name: 'AVPM & Associates', gstin: '08ABKFA4108L1ZC', address: '11 K-3, JYOTINAGAR,SAHAKAR MARG,, LALKOTHISCHEME,,NEAR VIDHANSABHA, JAIPUR,RAJASTHAN,INDIA, 302015', email: 'capiyushmittal90@gmail.com' },
+  bmc: { name: 'Bookmyca (A Unit of Aayu Consulting Group)', gstin: '08BXTPA0253J1ZE', address: '11 K-3, JYOTINAGAR,SAHAKAR MARG,, LALKOTHISCHEME,,NEAR VIDHANSABHA, JAIPUR,RAJASTHAN,INDIA, 302015', email: 'capiyushmittal90@gmail.com' },
+  aayu: { name: 'Aayu Consulting Group Private Limited', gstin: '08ABCCA6884A1ZQ', address: '11-K-3, Second Gate, Near Aadhunik Baal Vidhyalaya, Sahkar Marg, Jyoti Nagar, Near Vidhan Sabha, Jaipur 302015', email: 'capiyushmittal90@gmail.com' },
+  huf: { name: 'Piyush Mittal HUF', gstin: '', address: '11 K-3, JYOTINAGAR,SAHAKAR MARG,, LALKOTHISCHEME,,NEAR VIDHANSABHA, JAIPUR,RAJASTHAN,INDIA, 302015', email: '' }
+};
+
 window.addEventListener('DOMContentLoaded', async () => {
   token = localStorage.getItem('sa_token');
   if (!token) { window.location.href='index.html'; return; }
@@ -187,7 +203,22 @@ window.addEventListener('DOMContentLoaded', async () => {
   const params = new URLSearchParams(window.location.search);
   const taskId = params.get('taskId');
   if (taskId) await loadTaskData(taskId);
+  
+  onFirmChange(); // initialize setup based on first firm
 });
+
+function onFirmChange() {
+  const firmKey = document.getElementById('firmSelect').value;
+  if (firmKey === 'huf') {
+    document.getElementById('invType').value = 'NON_GST';
+    document.getElementById('invType').disabled = true;
+  } else {
+    document.getElementById('invType').value = 'GST';
+    document.getElementById('invType').disabled = false;
+  }
+  updateGST();
+  renderPreview();
+}
 
 async function loadClients() {
   try {
@@ -216,7 +247,9 @@ async function loadTaskData(taskId) {
       const lines = document.getElementById('lineItems');
       if (lines.children.length > 0) {
         const row = lines.children[0];
-        row.querySelector('.desc').value = task.serviceType + ' Services — ' + task.clientName;
+        const dept = task.department || task.serviceType || '';
+        const wt = task.workType || task.subService || '';
+        row.querySelector('.desc').value = `${dept}${wt ? ' - ' + wt : ''} Services — ${task.clientName}`;
         row.querySelector('.rate').value = task.finalFees || task.estimatedFees || 0;
         row.querySelector('.qty').value = 1;
         recalc();
@@ -366,7 +399,9 @@ async function saveInvoice(sendStatus) {
   const items = getLineItems().filter(i => i.description.trim());
   if (!items.length) { Swal.fire('Required','Add at least one line item.','warning'); return; }
 
+  const firmKey = document.getElementById('firmSelect').value;
   const payload = {
+    firmKey: firmKey,
     clientId: clientId === 'CUSTOM' ? null : clientId,
     customClientName,
     taskId: taskData?._id || undefined,
@@ -412,6 +447,9 @@ function renderPreview() {
   if (type==='GST') { if(isIntra){cgst=Math.round(taxable*0.09*100)/100;sgst=cgst;}else{igst=Math.round(taxable*0.18*100)/100;} }
   const total = Math.round((taxable+cgst+sgst+igst)*100)/100;
 
+  const firmKey = document.getElementById('firmSelect').value;
+  const f = FIRMS[firmKey] || FIRMS['avpm'];
+
   const c = selectedClient;
   const pa = document.getElementById('previewArea');
   
@@ -431,7 +469,7 @@ function renderPreview() {
   pa.innerHTML = `
     <div style="text-align:center;font-weight:700;font-size:15px;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px;">Tax Invoice</div>
     <table style="margin-bottom:8px;">
-      <tr><td style="width:55%;font-weight:700;font-size:13px;">AVPM & ASSOCIATES<br><span style="font-weight:400;font-size:11px;">11-K-3 SAHKAR MARG, JAIPUR 302015<br>GSTIN: 08ABKFA4108L1ZC<br>State: Rajasthan, Code: 08</span></td>
+      <tr><td style="width:55%;font-weight:700;font-size:13px;">${f.name.toUpperCase()}<br><span style="font-weight:400;font-size:11px;">${f.address}<br>${f.gstin?'GSTIN: '+f.gstin+'<br>':''}State: Rajasthan, Code: 08</span></td>
       <td><strong>Invoice No.</strong><br>Auto-generated<br><strong>Dated</strong><br>${new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'})}</td></tr>
     </table>
     <table style="margin-bottom:8px;">
@@ -456,7 +494,7 @@ function renderPreview() {
            <span style="font-weight:bold; font-size:11px; letter-spacing:0.5px;">Bookmyca</span>
            <span style="font-size:7px;">VERIFIED</span>
         </div>
-        <i style="color:#555">for AVPM & ASSOCIATES</i><br><br><br>Authorised Signatory
+        <i style="color:#555">for ${f.name.toUpperCase()}</i><br><br><br>Authorised Signatory
       </div>
     </div>
     <div style="text-align:center;font-size:10px;color:#999;margin-top:10px;border-top:1px solid #ccc;padding-top:4px;">This is a Computer Generated Invoice</div>
@@ -480,6 +518,9 @@ function downloadPDF(invoiceData) {
   const c = selectedClient || {};
   const isIntra = (c.stateCode||'08') === '08';
 
+  const firmKey = invoiceData?.firmKey || document.getElementById('firmSelect').value;
+  const f = FIRMS[firmKey] || FIRMS['avpm'];
+
   let taxable = 0;
   items.forEach(i => taxable += (i.amount || i.qty*i.rate));
   let cgst=0, sgst=0, igst=0;
@@ -497,11 +538,16 @@ function downloadPDF(invoiceData) {
 
   // Firm info
   let y = 28;
-  doc.setFontSize(11); doc.text('AVPM & ASSOCIATES', m, y);
+  doc.setFontSize(11); doc.text(f.name.toUpperCase(), m, y);
   doc.setFont('helvetica','normal'); doc.setFontSize(8);
-  doc.text('11-K-3 SAHKAR MARG, JAIPUR, RAJASTHAN 302015', m, y+4);
-  doc.text('GSTIN: 08ABKFA4108L1ZC | State: Rajasthan, Code: 08', m, y+8);
-  doc.text('Email: CAPIYUSHMITTAL80@GMAIL.COM', m, y+12);
+  
+  // Wrap address properly
+  const splitAddress = doc.splitTextToSize(f.address, 100);
+  doc.text(splitAddress, m, y+4);
+  y += (splitAddress.length * 4);
+  
+  if (f.gstin) doc.text('GSTIN: ' + f.gstin + ' | State: Rajasthan, Code: 08', m, y);
+  doc.text('Email: ' + f.email, m, y+4);
 
   // Invoice details (right side)
   doc.setFont('helvetica','bold'); doc.setFontSize(9);
@@ -615,5 +661,6 @@ function downloadPDF(invoiceData) {
   doc.save(`Invoice_${invNo.replace(/\//g,'-')}.pdf`);
 }
 </script>
+<script src="sidebar.js"></script>
 </body>
 </html>

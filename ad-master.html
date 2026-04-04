@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BookMyCA | Ad Master</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+  <style>
+    :root { --navy:#0F172A; --bg:#F8FAFC; --accent:#38BDF8; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:#334155; }
+    .header-bar { background:linear-gradient(135deg, var(--navy), #1e293b); padding:20px 30px; display:flex; justify-content:space-between; align-items:center; color:#fff; border-bottom:4px solid var(--accent); }
+    .ad-preview { max-height: 80px; object-fit: cover; border-radius: 6px; }
+    .btn-navy { background:var(--navy);color:#fff;border:none; }
+    .btn-navy:hover { background:#1E293B;color:#fff; }
+  </style>
+</head>
+<body>
+<div class="header-bar">
+  <div class="d-flex align-items-center gap-3">
+    <div style="width:40px;height:40px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1.2rem;">
+      <i class="fa-solid fa-bullhorn"></i>
+    </div>
+    <h4 class="mb-0 fw-bold">Advertisement Master</h4>
+  </div>
+  <div class="d-flex gap-3">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#adModal" onclick="populateClientsCheckbox()"><i class="fa-solid fa-plus me-2"></i>New Banner</button>
+    <a href="index.html" class="btn btn-outline-light"><i class="fa-solid fa-house me-2"></i>Hub</a>
+  </div>
+</div>
+
+<div class="container-fluid py-4 max-w-7xl mx-auto">
+  <!-- Integration Tabs -->
+  <ul class="nav nav-pills mb-4 p-2 bg-white rounded-4 shadow-sm border border-light" id="adTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active px-4 py-2 fw-bold text-navy bg-light border-0" id="manual-ads-tab" data-bs-toggle="pill" data-bs-target="#manual-ads" type="button" role="tab" style="border-radius: 8px;">🖼️ Global Image Banners</button>
+    </li>
+    <li class="nav-item ms-2" role="presentation">
+      <button class="nav-link px-4 py-2 fw-bold text-success border-0" id="ai-scraper-tab" data-bs-toggle="pill" data-bs-target="#ai-scraper" type="button" role="tab" style="border-radius: 8px;">🤖 AI Subsidy Auto-Pylot</button>
+    </li>
+  </ul>
+
+  <!-- Tab Content -->
+  <div class="tab-content" id="adTabsContent">
+    
+    <!-- Tab 1: Manual Image Banners -->
+    <div class="tab-pane fade show active" id="manual-ads" role="tabpanel" tabindex="0">
+      <div class="bg-white p-4 rounded-4 shadow-sm border">
+        <table id="adsTbl" class="table table-hover align-middle">
+          <thead class="table-light text-secondary">
+            <tr>
+              <th>Banner Preview</th>
+              <th>Title</th>
+              <th>Targeted Clients</th>
+              <th>Uploaded</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+      </div>
+    </div>
+    
+    <!-- Tab 2: AI Auto-Pylot Engine -->
+    <div class="tab-pane fade" id="ai-scraper" role="tabpanel" tabindex="0">
+      
+      <!-- Section: Subsidies Websites Tracking -->
+      <div class="bg-white p-4 rounded-4 shadow-sm border mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="fw-bold mb-0"><i class="fa-solid fa-spider me-2 text-primary"></i>Scraper Target Websites</h5>
+          <button class="btn btn-outline-success fw-bold px-3" onclick="showAddSourceModal()"><i class="fa-solid fa-plus me-2"></i>Add Website URL</button>
+        </div>
+        <table id="sourcesTbl" class="table table-hover align-middle w-100">
+          <thead class="table-light">
+            <tr>
+              <th>Website Name</th>
+              <th>Scrape URL</th>
+              <th>Last Scraped</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="sourcesBody">
+            <tr><td colspan="5" class="text-center py-4 text-muted">Loading AI Sources...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Section: AI Verified Subsidies -->
+      <div class="bg-white p-4 rounded-4 shadow-sm border">
+        <h5 class="fw-bold mb-4"><i class="fa-solid fa-certificate text-warning me-2"></i>Verified AI Outputs (Pending Broadcast)</h5>
+        <div class="alert alert-secondary border-0 mb-4 bg-light d-flex align-items-center gap-3">
+          <i class="fa-solid fa-robot fa-2x text-primary"></i>
+          <small class="text-muted">Once ChatGPT, Claude, and Gemini reach a consensus, the authenticated subsidy rules will appear below. Our system will generate a Bookmyca.in brochure for each.</small>
+        </div>
+        
+        <div class="row" id="verifiedSubsidiesContainer">
+          <div class="col-12 text-center text-muted py-4">Checking for AI output logs...</div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<!-- Add Ad Modal -->
+<div class="modal fade" id="adModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-image me-2 text-primary"></i>Upload Advertisement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="adForm" onsubmit="saveAd(event)">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Banner Image (JPG, PNG)</label>
+            <input type="file" id="adImage" class="form-control" accept="image/*" required>
+            <div class="form-text">Recommended size: 1200x300 pixels. Max 5MB.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Internal Title</label>
+            <input type="text" id="adTitle" class="form-control" placeholder="e.g., Diwali Offer 2026">
+          </div>
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label fw-bold mb-0">Target Clients</label>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="selectAllClients" onchange="toggleClients(this.checked)">
+                  <label class="form-check-label small text-muted">Select All</label>
+                </div>
+            </div>
+            <div class="small text-muted mb-2">If no clients are selected, the banner will be visible globally to everyone.</div>
+            
+            <div class="border rounded p-3 bg-light" style="max-height:250px; overflow-y:auto;" id="clientsListCheckboxes">
+                <div class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm"></div> Loading clients...</div>
+            </div>
+          </div>
+          <hr>
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-navy" id="saveBtn"><i class="fa-solid fa-upload me-2"></i>Upload Banner</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add AI Scraper Source Modal -->
+<div class="modal fade" id="addSourceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-link me-2 text-success"></i>Add Scraper URL</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="sourceForm" onsubmit="saveSource(event)">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Website Name / Gov Portal</label>
+            <input type="text" id="srcTitle" class="form-control" placeholder="e.g., MSME Ministry Portal" required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-bold">Direct URL to Scrape</label>
+            <input type="url" id="srcUrl" class="form-control" placeholder="https://..." required>
+          </div>
+          <div class="text-end">
+            <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-success fw-bold px-4">Start Tracking</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+const token = localStorage.getItem('sa_token');
+if (!token) window.location.href = 'index.html';
+const headers = { 'Authorization': 'Bearer ' + token };
+
+let allClients = [];
+
+$(document).ready(() => {
+    loadClientsList();
+    loadAds();
+});
+
+async function loadClientsList() {
+    try {
+        const res = await fetch('/api/clients', { headers });
+        const data = await res.json();
+        allClients = data.clients || [];
+    } catch(e) { console.error('Failed to load clients'); }
+}
+
+async function loadAds() {
+    try {
+        const res = await fetch('/api/ads', { headers });
+        const data = await res.json();
+        renderAds(data.ads || []);
+    } catch(err) {
+        Swal.fire('Error', 'Failed to fetch ads', 'error');
+    }
+}
+
+function renderAds(ads) {
+    if ($.fn.DataTable.isDataTable('#adsTbl')) $('#adsTbl').DataTable().destroy();
+    const tbody = document.getElementById('tblBody');
+    tbody.innerHTML = '';
+    
+    ads.forEach(ad => {
+        let targets = '<span class="badge bg-secondary">Global (All)</span>';
+        if (ad.targetClients && ad.targetClients.length > 0) {
+            targets = `<div style="max-height:60px;overflow-y:auto;font-size:0.8rem;">` + 
+                ad.targetClients.map(c => `<div class="text-muted border-bottom py-1">• ${c.clientName}</div>`).join('') +
+            `</div>`;
+        }
+        
+        tbody.innerHTML += `
+        <tr>
+            <td style="width:200px;"><img src="${ad.imagePath}" class="ad-preview w-100 shadow-sm border"></td>
+            <td class="fw-semibold">${ad.title || 'Untitled Banner'}</td>
+            <td>${targets}</td>
+            <td class="small text-muted">${new Date(ad.createdAt).toLocaleDateString()}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteAd('${ad._id}')"><i class="fa-solid fa-trash"></i></button>
+            </td>
+        </tr>`;
+    });
+    
+    $('#adsTbl').DataTable({ order:[[3,'desc']] });
+}
+
+function openAdModal() {
+    document.getElementById('adForm').reset();
+    populateClientsCheckbox();
+    new bootstrap.Modal(document.getElementById('adModal')).show();
+}
+
+function populateClientsCheckbox() {
+    document.getElementById('adForm').reset();
+    const list = document.getElementById('clientsListCheckboxes');
+    if (allClients.length === 0) {
+        list.innerHTML = '<span class="text-muted small">No clients found or still loading...</span>';
+        return;
+    }
+    let html = '<div class="row g-2">';
+    allClients.forEach(c => {
+        html += `
+        <div class="col-md-6">
+            <div class="form-check">
+                <input class="form-check-input clt-cb" type="checkbox" value="${c._id}" id="cb_${c._id}">
+                <label class="form-check-label small" for="cb_${c._id}">${c.clientName} <span class="text-muted px-1">(${c.clientCode})</span></label>
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    list.innerHTML = html;
+}
+
+function toggleClients(checked) {
+    document.querySelectorAll('.clt-cb').forEach(cb => cb.checked = checked);
+}
+
+async function saveAd(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveBtn');
+    const file = document.getElementById('adImage').files[0];
+    if(!file) return;
+    
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Uploading...';
+    btn.disabled = true;
+    
+    // gather specific clients
+    const targeted = [];
+    document.querySelectorAll('.clt-cb:checked').forEach(cb => targeted.push(cb.value));
+    
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('title', document.getElementById('adTitle').value);
+    formData.append('targetClients', JSON.stringify(targeted));
+    
+    try {
+        const res = await fetch('/api/ads', { method:'POST', headers:{'Authorization':'Bearer '+token}, body:formData });
+        const data = await res.json();
+        if(data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('adModal')).hide();
+            Swal.fire('Uploaded!', 'Banner is now active.', 'success');
+            loadAds();
+        } else {
+            Swal.fire('Error', data.error, 'error');
+        }
+    } catch(err) {
+        Swal.fire('Error', 'Connection failed', 'error');
+    } finally {
+        btn.innerHTML = '<i class="fa-solid fa-upload me-2"></i>Upload Banner';
+        btn.disabled = false;
+    }
+}
+
+async function deleteAd(id) {
+    if(!confirm('Permanently remove this banner?')) return;
+    try {
+        const res = await fetch(`/api/ads/${id}`, { method:'DELETE', headers });
+        const data = await res.json();
+        if(data.success) loadAds();
+        else Swal.fire('Error', data.error, 'error');
+    } catch(e) {
+        Swal.fire('Error', 'Connection failed', 'error');
+    }
+}
+
+// --- AI Auto-Scraper Logic ---
+function showAddSourceModal() {
+    document.getElementById('sourceForm').reset();
+    new bootstrap.Modal(document.getElementById('addSourceModal')).show();
+}
+
+async function loadSources() {
+    try {
+        const res = await fetch('/api/ad/sources', { headers });
+        const data = await res.json();
+        const tbody = document.getElementById('sourcesBody');
+        if(!data.sources || data.sources.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No websites are currently being tracked. Add one above.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.sources.map(s => `
+            <tr>
+                <td class="fw-bold">${s.title}</td>
+                <td><a href="${s.url}" target="_blank" class="text-primary text-decoration-none">${s.url}</a></td>
+                <td class="text-muted small">${s.lastScraped ? new Date(s.lastScraped).toLocaleString() : 'Never'}</td>
+                <td><span class="badge ${s.isActive ? 'bg-success' : 'bg-secondary'}">${s.isActive ? 'Active' : 'Paused'}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSource('${s._id}')"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) { console.error(e); }
+}
+
+async function saveSource(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const url = document.getElementById('srcUrl').value;
+    const title = document.getElementById('srcTitle').value;
+    
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/ad/sources', { 
+            method:'POST', 
+            headers:{...headers, 'Content-Type': 'application/json'},
+            body: JSON.stringify({ url, title })
+        });
+        const data = await res.json();
+        if(data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('addSourceModal')).hide();
+            Swal.fire('Added Tracker', 'The AI will now crawl this website.', 'success');
+            loadSources();
+        } else { Swal.fire('Error', data.error, 'error'); }
+    } catch(err) { Swal.fire('Error', 'Connection failed', 'error'); } 
+    finally { btn.disabled = false; }
+}
+
+async function deleteSource(id) {
+    if(!confirm('Remove this website from the AI tracking list?')) return;
+    try {
+        const res = await fetch(`/api/ad/sources/${id}`, { method: 'DELETE', headers });
+        const data = await res.json();
+        if(data.success) loadSources();
+    } catch(e) { console.error(e); }
+}
+
+async function loadVerifiedSubsidies() {
+    try {
+        const res = await fetch('/api/ad/verified-subsidies', { headers });
+        const data = await res.json();
+        const container = document.getElementById('verifiedSubsidiesContainer');
+        if(!data.subsidies || data.subsidies.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center py-4 text-muted"><i class="fa-solid fa-bed text-muted fa-2x mb-3 d-block"></i>No verified subsidies found yet. The AI agents are resting.</div>';
+            return;
+        }
+    } catch(e) { console.error(e); }
+}
+
+// Override init to load new data
+const originalInit = window.onload;
+window.onload = function() {
+    if (originalInit) originalInit();
+    loadSources();
+    loadVerifiedSubsidies();
+}
+</script>
+<script src="sidebar.js"></script>
+</body>
+</html>
