@@ -141,17 +141,78 @@ let token = '';
 let templates = [];
 let table;
 let editorInitialised = false;
+// Permissions for this session
+let canRead = false, canWrite = false, canEdit = false;
 
 window.addEventListener('DOMContentLoaded', async () => {
     token = localStorage.getItem('sa_token');
-    const user = JSON.parse(localStorage.getItem('sa_user')||'{}');
-    if (!token || (user.role !== 'admin' && user.role !== 'superadmin')) {
+    const user = JSON.parse(localStorage.getItem('sa_user') || '{}');
+
+    if (!token) {
         window.location.href = 'index.html';
         return;
     }
+
+    const isAdmin = (user.role === 'admin' || user.role === 'superadmin' || user.type === 'admin');
+    const isEmployee = (user.type === 'employee');
+
+    if (!isAdmin && !isEmployee) {
+        window.location.href = 'index.html';
+        return;
+    }
+
+    if (isAdmin) {
+        // Admins always have full access
+        canRead = canWrite = canEdit = true;
+    } else {
+        // For employees, check their permissions from the server (fresh from DB)
+        try {
+            const r = await fetch(`${API}/api/auth/my-permissions`, {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            const d = await r.json();
+            if (!d.success) throw new Error('Permission check failed');
+
+            if (d.isAdmin) {
+                canRead = canWrite = canEdit = true;
+            } else {
+                const mod = (d.permissions?.modules || []).find(m => m.name === 'template-master');
+                canRead  = mod?.read  === true;
+                canWrite = mod?.write === true;
+                canEdit  = mod?.edit  === true;
+                // Also update localStorage with latest permissions
+                if (d.permissions) {
+                    const updatedUser = { ...user, permissions: d.permissions };
+                    localStorage.setItem('sa_user', JSON.stringify(updatedUser));
+                }
+            }
+        } catch (e) {
+            // Fall back to stored permissions in localStorage
+            const mod = (user.permissions?.modules || []).find(m => m.name === 'template-master');
+            canRead  = mod?.read  === true;
+            canWrite = mod?.write === true;
+            canEdit  = mod?.edit  === true;
+        }
+
+        if (!canRead) {
+            // No read permission at all — redirect
+            alert('Access Denied: You do not have permission to view Template Master. Contact your admin.');
+            window.location.href = 'index.html';
+            return;
+        }
+    }
+
+    // Apply UI based on permissions
+    applyPermissionUI();
     await loadTemplates();
     initTinyMCE();
 });
+
+function applyPermissionUI() {
+    // Hide "Add Template" button if no write permission
+    const addBtn = document.querySelector('.card-header .btn-navy');
+    if (addBtn && !canWrite) addBtn.style.display = 'none';
+}
 
 function initTinyMCE() {
     tinymce.init({
@@ -194,14 +255,20 @@ function renderTable() {
     templates.forEach(t => {
         const snippet = t.content ? t.content.replace(/<[^>]*>?/gm, '').substring(0, 80) + '...' : '<i>No content</i>';
         const tr = document.createElement('tr');
+        // Build action buttons based on permissions
+        let actionHtml = '';
+        if (canEdit) {
+            actionHtml += `<button class="btn btn-sm btn-light text-primary me-2" onclick="editTemplate('${t._id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>`;
+            actionHtml += `<button class="btn btn-sm btn-light text-danger" onclick="deleteTemplate('${t._id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>`;
+        } else if (canRead) {
+            // Read-only: show a view button
+            actionHtml += `<button class="btn btn-sm btn-light text-secondary" onclick="viewTemplate('${t._id}')" title="View"><i class="fa-solid fa-eye"></i></button>`;
+        }
         tr.innerHTML = `
             <td class="fw-semibold text-dark">${t.title}</td>
             <td><span class="type-badge">${t.type}</span></td>
             <td class="text-muted small">${snippet}</td>
-            <td>
-                <button class="btn btn-sm btn-light text-primary me-2" onclick="editTemplate('${t._id}')"><i class="fa-solid fa-pen"></i></button>
-                <button class="btn btn-sm btn-light text-danger" onclick="deleteTemplate('${t._id}')"><i class="fa-solid fa-trash"></i></button>
-            </td>
+            <td>${actionHtml}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -212,6 +279,18 @@ function renderTable() {
         ordering: false
     });
 }
+
+function viewTemplate(id) {
+    const t = templates.find(x => x._id === id);
+    if (!t) return;
+    Swal.fire({
+        title: t.title,
+        html: `<div class="text-start" style="max-height:70vh;overflow:auto;">${t.content || '<em>No content</em>'}</div>`,
+        confirmButtonColor: '#0F172A',
+        width: '80%'
+    });
+}
+
 
 function openModal() {
     document.getElementById('tplId').value = '';

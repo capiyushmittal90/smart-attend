@@ -7,26 +7,56 @@ window.initGlobalSidebar = function() {
     const path = window.location.pathname;
     if (path.includes('client-portal.html')) return;
     
-    // Only render sidebar if logged in user is admin/superadmin
+    // Render sidebar if logged in as admin/superadmin OR as employee with any module permissions
+    let userRole = null;
+    let empPermissions = null;
+    let isEmployee = false;
     try {
         const uStr = localStorage.getItem('sa_user');
         if (!uStr) return;
         const u = JSON.parse(uStr);
-        if (u.role !== 'admin' && u.role !== 'superadmin' && u.type !== 'admin') return;
+        const isAdmin = (u.role === 'admin' || u.role === 'superadmin' || u.type === 'admin');
+        isEmployee = (u.type === 'employee');
+        if (!isAdmin && !isEmployee) return;
+        userRole = u.role;
+        if (isEmployee) {
+            empPermissions = u.permissions || null;
+            // Allow sidebar only if employee has at least one module permission
+            const mods = empPermissions?.modules || [];
+            const hasAny = mods.some(m => m.read || m.write || m.edit);
+            if (!hasAny && !u.isTeamAdmin) return; // No permissions at all — no sidebar
+        }
     } catch(e) { return; }
 
-    const modules = [
-        { name: 'Ad Master', url: 'ad-master.html', icon: 'fa-bullhorn' },
-        { name: 'Admin Tasks', url: 'admin-tasks.html', icon: 'fa-clipboard-check' },
-        { name: 'Agreement Gen', url: 'agreement-builder.html', icon: 'fa-file-signature' },
-        { name: 'Attendance', url: 'index.html#attendance', icon: 'fa-clock' },
-        { name: 'Client Master', url: 'client-master.html', icon: 'fa-users' },
-        { name: 'Hub (Home)', url: 'index.html', icon: 'fa-house' },
-        { name: 'Invoice Builder', url: 'invoice-builder.html', icon: 'fa-file-invoice-dollar' },
-        { name: 'Reports', url: 'reports.html', icon: 'fa-chart-pie' },
-        { name: 'Task Portal', url: 'task-portal.html', icon: 'fa-network-wired' },
-        { name: 'Template Master', url: 'template-master.html', icon: 'fa-cog' }
+
+    // Each module has an optional permKey that maps to a permission key in the RBAC system
+    const allModules = [
+        { name: 'Hub (Home)',       url: 'index.html',            icon: 'fa-house',              permKey: null }, // always visible
+        { name: 'Admin Tasks',      url: 'admin-tasks.html',      icon: 'fa-clipboard-check',    permKey: 'admin-tasks' },
+        { name: 'Task Portal',      url: 'task-portal.html',      icon: 'fa-network-wired',      permKey: 'task-portal' },
+        { name: 'Client Master',    url: 'client-master.html',    icon: 'fa-users',              permKey: 'client-master' },
+        { name: 'Invoice Builder',  url: 'invoice-builder.html',  icon: 'fa-file-invoice-dollar', permKey: 'invoice-builder' },
+        { name: 'Reports',          url: 'reports.html',          icon: 'fa-chart-pie',          permKey: 'reports' },
+        { name: 'Agreement Gen',    url: 'agreement-builder.html',icon: 'fa-file-signature',     permKey: 'agreement-builder' },
+        { name: 'Template Master',  url: 'template-master.html',  icon: 'fa-cog',                permKey: 'template-master' },
+        { name: 'Ad Master',        url: 'ad-master.html',        icon: 'fa-bullhorn',           permKey: 'ad-master' },
+        { name: 'Attendance',       url: 'index.html#attendance', icon: 'fa-clock',              permKey: 'attendance' },
     ];
+
+    // Filter modules for employees based on their permissions
+    let modules;
+    if (isEmployee && empPermissions) {
+        const permMods = empPermissions.modules || [];
+        const isTeamAdmin = (JSON.parse(localStorage.getItem('sa_user') || '{}').isTeamAdmin);
+        modules = allModules.filter(m => {
+            if (!m.permKey) return true; // Hub is always shown
+            if (isTeamAdmin) return true; // Team admins see everything
+            const p = permMods.find(pm => pm.name === m.permKey);
+            return p && (p.read || p.write || p.edit);
+        });
+    } else {
+        modules = allModules;
+    }
 
     // Add Super Admin Panel link for superadmin only
     try {
@@ -104,7 +134,7 @@ window.initGlobalSidebar = function() {
     
     navHtml += `</div>
         <div class="mt-auto p-3 border-top" style="border-color:#334155!important;">
-            <a href="#" onclick="localStorage.removeItem('sa_user'); window.location.href='index.html'; return false;" class="sidebar-link" style="color: #ef4444; margin-bottom: 10px;">
+            <a href="#" onclick="localStorage.removeItem('sa_user'); localStorage.removeItem('sa_token'); window.location.href='index.html'; return false;" class="sidebar-link" style="color: #ef4444; margin-bottom: 10px;">
                 <i class="fa-solid fa-right-from-bracket"></i> <span>Logout</span>
             </a>
             <div class="small text-muted text-center">&copy; 2026 BookMyCA</div>
@@ -124,6 +154,7 @@ window.initGlobalSidebar = function() {
     document.body.appendChild(mobileBtn);
     
 };
+
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', window.initGlobalSidebar);

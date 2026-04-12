@@ -87,9 +87,14 @@ async function empLogin(e) {
     try {
         const data = await api('POST', '/api/auth/employee-login', { email, password });
         authToken = data.token;
+        // Store full employee object including permissions for RBAC
         currentUser = { ...data.employee, type: 'employee' };
         localStorage.setItem('sa_token', authToken);
         localStorage.setItem('sa_user', JSON.stringify(currentUser));
+        
+        // Initialize sidebar if employee has module permissions
+        if (window.initGlobalSidebar) window.initGlobalSidebar();
+        
         toast(`Welcome, ${currentUser.name}! ✓`, 'success');
         showScreen('screen-emp-dashboard');
     } catch (err) {
@@ -98,6 +103,7 @@ async function empLogin(e) {
         btn.disabled = false; btn.textContent = '👤 Log In';
     }
 }
+
 
 // ============ EMPLOYEE DASHBOARD ============
 function initEmpDashboard() {

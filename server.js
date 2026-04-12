@@ -361,7 +361,39 @@ app.post('/api/auth/employee-login', async (req, res) => {
         { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, departments: staff.department, shift: staff.shift, type: 'employee' },
         JWT_SECRET, { expiresIn: '12h' }
     );
-    res.json({ success: true, token, employee: { id: staff._id, code: staff.code, name: staff.name, email: staff.email, dept: staff.dept, departments: staff.department, shift: staff.shift } });
+    // Include permissions so front-end can enforce RBAC immediately
+    const perms = staff.permissions || { modules: [], canAssignTask: false, canUploadOutput: true };
+    res.json({
+        success: true,
+        token,
+        employee: {
+            id: staff._id,
+            code: staff.code,
+            name: staff.name,
+            email: staff.email,
+            dept: staff.dept,
+            departments: staff.department,
+            shift: staff.shift,
+            isTeamAdmin: staff.isTeamAdmin || false,
+            position: staff.position || 'Member',
+            permissions: perms
+        }
+    });
+});
+
+// Employee: get own profile + permissions (for re-fetching after login)
+app.get('/api/auth/my-permissions', anyAuth, async (req, res) => {
+    try {
+        if (req.user.type !== 'employee') {
+            // Admins/superadmins have full permissions
+            return res.json({ success: true, permissions: { modules: [], canAssignTask: true, canUploadOutput: true }, isAdmin: true });
+        }
+        const staff = await Staff.findById(req.user.id).select('permissions isTeamAdmin position');
+        if (!staff) return res.status(404).json({ error: 'Employee not found' });
+        res.json({ success: true, permissions: staff.permissions || { modules: [], canAssignTask: false, canUploadOutput: true }, isTeamAdmin: staff.isTeamAdmin, position: staff.position });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Client Login — Password based
@@ -2200,9 +2232,49 @@ app.delete('/api/payments/:id', adminAuth, async (req, res) => {
 
 // ============ TEMPLATE MASTER (CHECKLISTS/FORMS) ============
 
-// ── Get all templates ──────────────────────────────────────────
+// Helper: check if a user (admin or employee) has a specific permission on a module
+async function hasModulePermission(user, moduleName, permType) {
+    if (!user) return false;
+    // Admins and superadmins always have full access
+    if (user.role === 'admin' || user.role === 'superadmin' || user.type === 'admin') return true;
+    // For employees, check their stored permissions
+    if (user.type === 'employee') {
+        const staff = await Staff.findById(user.id).select('permissions isTeamAdmin').lean();
+        if (!staff) return false;
+        if (staff.isTeamAdmin) return true; // Team admins have full access
+        const mod = (staff.permissions?.modules || []).find(m => m.name === moduleName);
+        if (!mod) return false;
+        return mod[permType] === true;
+    }
+    return false;
+}
+
+// Middleware factory for module-level permission check
+function moduleAuth(moduleName, permType) {
+    return async (req, res, next) => {
+        let token = req.headers.authorization?.split(' ')[1];
+        if (!token && req.query.token) token = req.query.token;
+        if (!token) return res.status(401).json({ error: 'No token provided' });
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            req.user = decoded;
+            const allowed = await hasModulePermission(decoded, moduleName, permType);
+            if (!allowed) return res.status(403).json({ error: 'You do not have permission to perform this action.' });
+            next();
+        } catch (err) {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
+    };
+}
+
+// ── Get all templates (any authenticated user with read permission) ──
 app.get('/api/templates', anyAuth, async (req, res) => {
     try {
+        // Check read permission for employees
+        if (req.user.type === 'employee') {
+            const allowed = await hasModulePermission(req.user, 'template-master', 'read');
+            if (!allowed) return res.status(403).json({ error: 'No read permission for Template Master' });
+        }
         const templates = await Template.find().sort({ createdAt: -1 });
         res.json({ success: true, templates });
     } catch (err) {
@@ -2210,8 +2282,8 @@ app.get('/api/templates', anyAuth, async (req, res) => {
     }
 });
 
-// ── Create new template (admin) ────────────────────────────────
-app.post('/api/templates', adminAuth, async (req, res) => {
+// ── Create new template (admin or employee with write permission) ──
+app.post('/api/templates', moduleAuth('template-master', 'write'), async (req, res) => {
     try {
         const { title, type, content } = req.body;
         if (!title) return res.status(400).json({ error: 'Title is required' });
@@ -2222,8 +2294,8 @@ app.post('/api/templates', adminAuth, async (req, res) => {
     }
 });
 
-// ── Update template (admin) ────────────────────────────────────
-app.put('/api/templates/:id', adminAuth, async (req, res) => {
+// ── Update template (admin or employee with edit permission) ──
+app.put('/api/templates/:id', moduleAuth('template-master', 'edit'), async (req, res) => {
     try {
         const { title, type, content } = req.body;
         const updateData = { updatedAt: Date.now() };
@@ -2239,8 +2311,8 @@ app.put('/api/templates/:id', adminAuth, async (req, res) => {
     }
 });
 
-// ── Delete template (admin) ────────────────────────────────────
-app.delete('/api/templates/:id', adminAuth, async (req, res) => {
+// ── Delete template (admin or employee with edit permission) ──
+app.delete('/api/templates/:id', moduleAuth('template-master', 'edit'), async (req, res) => {
     try {
         const template = await Template.findByIdAndDelete(req.params.id);
         if (!template) return res.status(404).json({ error: 'Template not found' });
