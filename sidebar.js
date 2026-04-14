@@ -31,7 +31,8 @@ window.initGlobalSidebar = function() {
 
     // Each module has an optional permKey that maps to a permission key in the RBAC system
     const allModules = [
-        { name: 'Hub (Home)',       url: 'index.html',            icon: 'fa-house',              permKey: null }, // always visible
+        { name: 'Hub (Home)',       url: 'index.html',            icon: 'fa-house',              permKey: null },
+        { name: '✅ My To-Do',     url: 'todo.html',             icon: 'fa-check-circle',       permKey: null }, // always visible
         { name: 'Admin Tasks',      url: 'admin-tasks.html',      icon: 'fa-clipboard-check',    permKey: 'admin-tasks' },
         { name: 'Task Portal',      url: 'task-portal.html',      icon: 'fa-network-wired',      permKey: 'task-portal' },
         { name: 'Client Master',    url: 'client-master.html',    icon: 'fa-users',              permKey: 'client-master' },

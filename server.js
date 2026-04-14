@@ -194,6 +194,26 @@ const templateSchema = new mongoose.Schema({
 });
 const Template = mongoose.model('Template', templateSchema);
 
+// --- Employee Todo ---
+const todoSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    description: { type: String, default: '' },
+    dueDate: { type: Date, default: null },
+    priority: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
+    status: { type: String, enum: ['todo', 'in-progress', 'done'], default: 'todo' },
+    isImportant: { type: Boolean, default: false },
+    isMyDay: { type: Boolean, default: false },
+    list: { type: String, default: 'Work' }, // Work, Personal, Office, etc.
+    staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
+    staffName: { type: String },
+    staffCode: { type: String },
+    completedAt: { type: Date, default: null },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+const Todo = mongoose.model('Todo', todoSchema);
+
+
 // --- File Attachment (Input/Output) ---
 const fileSchema = new mongoose.Schema({
     taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
@@ -2500,8 +2520,138 @@ try {
     console.warn("⚠️ Could not load ai_marketing engine:", e.message);
 }
 
+// ============ TODO ROUTES ============
+
+// Get own todos (employee) — with optional filters
+app.get('/api/todos/my', anyAuth, async (req, res) => {
+    try {
+        const { filter, list, priority } = req.query;
+        const staffId = req.user.id;
+        let query = { staffId };
+
+        if (filter === 'important') query.isImportant = true;
+        if (filter === 'myday') query.isMyDay = true;
+        if (filter === 'done') query.status = 'done';
+        if (filter === 'todo') query.status = { $in: ['todo', 'in-progress'] };
+        if (filter === 'planned') query.dueDate = { $ne: null };
+        if (list && list !== 'all') query.list = list;
+        if (priority) query.priority = priority;
+
+        const todos = await Todo.find(query).sort({ isImportant: -1, dueDate: 1, createdAt: -1 });
+        res.json({ success: true, todos });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create todo (employee)
+app.post('/api/todos', anyAuth, async (req, res) => {
+    try {
+        const { title, description, dueDate, priority, list, isImportant, isMyDay } = req.body;
+        if (!title) return res.status(400).json({ error: 'Title is required' });
+
+        const staff = await Staff.findById(req.user.id).select('name code');
+        const todo = await Todo.create({
+            title,
+            description: description || '',
+            dueDate: dueDate ? new Date(dueDate) : null,
+            priority: priority || 'medium',
+            list: list || 'Work',
+            isImportant: isImportant || false,
+            isMyDay: isMyDay || false,
+            staffId: req.user.id,
+            staffName: staff?.name || req.user.name,
+            staffCode: staff?.code || req.user.code
+        });
+        res.json({ success: true, todo });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update todo (employee — own only)
+app.put('/api/todos/:id', anyAuth, async (req, res) => {
+    try {
+        const todo = await Todo.findOne({ _id: req.params.id, staffId: req.user.id });
+        if (!todo) return res.status(404).json({ error: 'Todo not found' });
+
+        const { title, description, dueDate, priority, list, isImportant, isMyDay, status } = req.body;
+        if (title !== undefined) todo.title = title;
+        if (description !== undefined) todo.description = description;
+        if (dueDate !== undefined) todo.dueDate = dueDate ? new Date(dueDate) : null;
+        if (priority !== undefined) todo.priority = priority;
+        if (list !== undefined) todo.list = list;
+        if (isImportant !== undefined) todo.isImportant = isImportant;
+        if (isMyDay !== undefined) todo.isMyDay = isMyDay;
+        if (status !== undefined) {
+            todo.status = status;
+            todo.completedAt = status === 'done' ? new Date() : null;
+        }
+        todo.updatedAt = new Date();
+        await todo.save();
+        res.json({ success: true, todo });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete todo (employee — own only)
+app.delete('/api/todos/:id', anyAuth, async (req, res) => {
+    try {
+        const todo = await Todo.findOneAndDelete({ _id: req.params.id, staffId: req.user.id });
+        if (!todo) return res.status(404).json({ error: 'Todo not found' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin: Get ALL todos with filters
+app.get('/api/todos/all', adminAuth, async (req, res) => {
+    try {
+        const { staffId, status, priority, list, from, to } = req.query;
+        let query = {};
+        if (staffId) query.staffId = staffId;
+        if (status) query.status = status;
+        if (priority) query.priority = priority;
+        if (list) query.list = list;
+        if (from || to) {
+            query.createdAt = {};
+            if (from) query.createdAt.$gte = new Date(from);
+            if (to) query.createdAt.$lte = new Date(to);
+        }
+        const todos = await Todo.find(query).sort({ createdAt: -1 }).limit(500);
+        res.json({ success: true, todos });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin: Stats
+app.get('/api/todos/stats', adminAuth, async (req, res) => {
+    try {
+        const total = await Todo.countDocuments();
+        const done = await Todo.countDocuments({ status: 'done' });
+        const pending = await Todo.countDocuments({ status: { $in: ['todo', 'in-progress'] } });
+        const overdue = await Todo.countDocuments({
+            status: { $in: ['todo', 'in-progress'] },
+            dueDate: { $lt: new Date(), $ne: null }
+        });
+        const highPriority = await Todo.countDocuments({ priority: 'high', status: { $ne: 'done' } });
+        // Per-employee stats
+        const byEmployee = await Todo.aggregate([
+            { $group: { _id: { staffId: '$staffId', staffName: '$staffName', staffCode: '$staffCode' }, total: { $sum: 1 }, done: { $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] } } } },
+            { $sort: { total: -1 } }
+        ]);
+        res.json({ success: true, total, done, pending, overdue, highPriority, byEmployee });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============ START SERVER ============
 const PORT = process.env.PORT || 3847;
 app.listen(PORT, () => {
     console.log(`\n🚀 BookMyCA Smart Attend Server v4.0 running at http://localhost:${PORT}\n`);
 });
+
