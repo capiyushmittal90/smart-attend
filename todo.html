@@ -127,6 +127,22 @@ body{font-family:'Inter',sans-serif;background:#0F172A;color:#E2E8F0;height:100v
 input:checked+.slider{background:#38BDF8;}
 input:checked+.slider:before{transform:translateX(16px);background:#fff;}
 
+/* ── Attachments ── */
+.attach-zone{border:1.5px dashed #334155;border-radius:10px;padding:10px;text-align:center;cursor:pointer;transition:.2s;margin-top:4px;}
+.attach-zone:hover{border-color:#38BDF8;background:rgba(56,189,248,.05);}
+.attach-zone label{cursor:pointer;font-size:.8rem;color:#475569;display:flex;align-items:center;justify-content:center;gap:6px;}
+.attach-zone label:hover{color:#38BDF8;}
+.attach-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.attach-item{position:relative;border-radius:8px;overflow:hidden;border:1px solid #334155;cursor:pointer;transition:.2s;}
+.attach-item:hover{border-color:#38BDF8;}
+.attach-thumb{width:64px;height:64px;object-fit:cover;display:block;}
+.attach-doc{width:64px;height:64px;background:#1E293B;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;}
+.attach-doc i{font-size:1.4rem;color:#38BDF8;}
+.attach-doc span{font-size:.55rem;color:#64748B;text-align:center;padding:0 4px;word-break:break-all;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.attach-del{position:absolute;top:2px;right:2px;background:#0F172Acc;border:none;color:#EF4444;width:16px;height:16px;border-radius:50%;font-size:.6rem;cursor:pointer;display:none;align-items:center;justify-content:center;}
+.attach-item:hover .attach-del{display:flex;}
+.attach-uploading{font-size:.75rem;color:#38BDF8;display:flex;align-items:center;gap:6px;padding:4px;}
+
 /* ── Admin view overlay ── */
 .admin-overlay{display:none;position:fixed;inset:0;background:#0F172A;z-index:100;overflow:auto;}
 .admin-overlay.show{display:block;}
@@ -294,6 +310,15 @@ input:checked+.slider:before{transform:translateX(16px);background:#fff;}
       <div class="detail-row">
         <div class="detail-label">Notes</div>
         <textarea id="d-desc" class="detail-textarea" placeholder="Add notes..." onchange="saveDetail('description',this.value)"></textarea>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">📎 Attachments <span style="color:#475569;font-weight:400;">(images & docs, max 1MB each)</span></div>
+        <div class="attach-zone" onclick="document.getElementById('att-file-input').click()">
+          <label><i class="fa-solid fa-cloud-arrow-up"></i> Click to upload image or document</label>
+        </div>
+        <input type="file" id="att-file-input" style="display:none" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="handleAttachUpload(this)">
+        <div id="att-uploading" style="display:none" class="attach-uploading"><i class="fa-solid fa-spinner fa-spin"></i> Uploading...</div>
+        <div class="attach-list" id="attach-list"></div>
       </div>
       <div class="detail-row" style="font-size:.72rem;color:#334155;" id="d-created-at"></div>
     </div>
@@ -531,6 +556,7 @@ function openDetail(id) {
   if (t.status === 'done') { btn.textContent = '↩ Mark as Incomplete'; btn.classList.add('undo'); }
   else { btn.textContent = '✅ Mark as Done'; btn.classList.remove('undo'); }
   document.getElementById('detail-panel').classList.remove('hidden');
+  renderAttachments(t.attachments || []);
 }
 
 function closeDetail() {
@@ -654,6 +680,82 @@ async function loadAdminTodos() {
           </tr>`;
         }).join('');
   } catch(e){}
+}
+
+// ── Attachments ──
+function renderAttachments(attachments) {
+  const list = document.getElementById('attach-list');
+  list.innerHTML = '';
+  (attachments || []).forEach(a => {
+    const isImg = a.mimeType && a.mimeType.startsWith('image/');
+    const item = document.createElement('div');
+    item.className = 'attach-item';
+    item.title = a.name;
+    if (isImg && a.data) {
+      item.innerHTML = `<img class="attach-thumb" src="${a.data}" alt="${escHtml(a.name||'')}"><button class="attach-del" onclick="deleteAttachment('${a._id}',event)" title="Remove">✕</button>`;
+      item.querySelector('img').onclick = () => previewAttachment(a);
+    } else {
+      const ext = (a.name||'file').split('.').pop().toUpperCase().slice(0,4);
+      item.innerHTML = `<div class="attach-doc"><i class="fa-solid fa-file-lines"></i><span>${escHtml(a.name||'file')}</span></div><button class="attach-del" onclick="deleteAttachment('${a._id}',event)" title="Remove">✕</button>`;
+      item.querySelector('.attach-doc').onclick = () => downloadAttachment(a);
+    }
+    list.appendChild(item);
+  });
+}
+
+async function handleAttachUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 1048576) { alert('❌ File too large! Max 1MB allowed.'); input.value=''; return; }
+  if (!selectedId) return;
+  document.getElementById('att-uploading').style.display = 'flex';
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const r = await fetch(`${API}/api/todos/${selectedId}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ name: file.name, mimeType: file.type, size: file.size, data: e.target.result })
+      });
+      const d = await r.json();
+      if (d.success) {
+        // Update local todo attachments
+        const t = allTodos.find(x => x._id === selectedId);
+        if (t) {
+          if (!t.attachments) t.attachments = [];
+          // Re-fetch to get complete attachment with data
+          const tr = await fetch(`${API}/api/todos/${selectedId}/attachments/${d.attachment._id}`, { headers: { Authorization: 'Bearer '+token } });
+          const td = await tr.json();
+          if(td.success) t.attachments.push(td.attachment);
+          else t.attachments.push({ ...d.attachment, data: e.target.result });
+          renderAttachments(t.attachments);
+        }
+      } else { alert('Upload failed: ' + (d.error||'Unknown error')); }
+    } catch(err) { alert('Upload error: ' + err.message); }
+    document.getElementById('att-uploading').style.display = 'none';
+    input.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function deleteAttachment(attachId, e) {
+  if(e) e.stopPropagation();
+  if (!selectedId) return;
+  await fetch(`${API}/api/todos/${selectedId}/attachments/${attachId}`, { method:'DELETE', headers:{Authorization:'Bearer '+token} });
+  const t = allTodos.find(x=>x._id===selectedId);
+  if (t) { t.attachments = (t.attachments||[]).filter(a=>a._id!==attachId); renderAttachments(t.attachments); }
+}
+
+function previewAttachment(a) {
+  Swal.fire({ imageUrl: a.data, imageAlt: a.name, title: a.name, background:'#1E293B', color:'#E2E8F0', confirmButtonColor:'#38BDF8', width:'80%' });
+}
+
+function downloadAttachment(a) {
+  if (!a.data) return;
+  const link = document.createElement('a');
+  link.href = a.data;
+  link.download = a.name || 'file';
+  link.click();
 }
 
 // ── Init ──

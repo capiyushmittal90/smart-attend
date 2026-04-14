@@ -203,11 +203,19 @@ const todoSchema = new mongoose.Schema({
     status: { type: String, enum: ['todo', 'in-progress', 'done'], default: 'todo' },
     isImportant: { type: Boolean, default: false },
     isMyDay: { type: Boolean, default: false },
-    list: { type: String, default: 'Work' }, // Work, Personal, Office, etc.
+    list: { type: String, default: 'Work' },
     staffId: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
     staffName: { type: String },
     staffCode: { type: String },
     completedAt: { type: Date, default: null },
+    attachments: [{
+        _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+        name: { type: String },
+        mimeType: { type: String },
+        size: { type: Number },
+        data: { type: String }, // base64
+        uploadedAt: { type: Date, default: Date.now }
+    }],
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 });
@@ -2644,6 +2652,52 @@ app.get('/api/todos/stats', adminAuth, async (req, res) => {
             { $sort: { total: -1 } }
         ]);
         res.json({ success: true, total, done, pending, overdue, highPriority, byEmployee });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Upload attachment to todo (max 1MB, base64 in DB) ──
+app.post('/api/todos/:id/attachments', anyAuth, async (req, res) => {
+    try {
+        const todo = await Todo.findOne({ _id: req.params.id, staffId: req.user.id });
+        if (!todo) return res.status(404).json({ error: 'Todo not found' });
+        const { name, mimeType, size, data } = req.body;
+        if (!data) return res.status(400).json({ error: 'File data required' });
+        if (size > 1048576) return res.status(400).json({ error: 'File too large. Max 1MB allowed.' });
+        todo.attachments.push({ name, mimeType, size, data });
+        todo.updatedAt = new Date();
+        await todo.save();
+        // Return without base64 data for speed
+        const saved = todo.attachments[todo.attachments.length - 1];
+        res.json({ success: true, attachment: { _id: saved._id, name: saved.name, mimeType: saved.mimeType, size: saved.size, uploadedAt: saved.uploadedAt } });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Get single attachment (for download/preview) ──
+app.get('/api/todos/:id/attachments/:attachId', anyAuth, async (req, res) => {
+    try {
+        const todo = await Todo.findOne({ _id: req.params.id, staffId: req.user.id });
+        if (!todo) return res.status(404).json({ error: 'Todo not found' });
+        const att = todo.attachments.id(req.params.attachId);
+        if (!att) return res.status(404).json({ error: 'Attachment not found' });
+        res.json({ success: true, attachment: att });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Delete attachment from todo ──
+app.delete('/api/todos/:id/attachments/:attachId', anyAuth, async (req, res) => {
+    try {
+        const todo = await Todo.findOne({ _id: req.params.id, staffId: req.user.id });
+        if (!todo) return res.status(404).json({ error: 'Todo not found' });
+        todo.attachments = todo.attachments.filter(a => a._id.toString() !== req.params.attachId);
+        todo.updatedAt = new Date();
+        await todo.save();
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
