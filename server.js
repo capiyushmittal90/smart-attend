@@ -2520,13 +2520,14 @@ app.get('/api/ad/verified-subsidies', adminAuth, async (req, res) => {
     } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// ============ INITIALIZE AI MARKETING ENGINE ============
-try {
-    const aiEngine = require('./ai_marketing');
-    aiEngine.initCronJobs();
-} catch (e) {
-    console.warn("⚠️ Could not load ai_marketing engine:", e.message);
-}
+// ============ AI MARKETING ENGINE (DISABLED — requires puppeteer/AI SDKs not installed) ============
+// Uncomment when AI Marketing module is needed and dependencies are restored
+// try {
+//     const aiEngine = require('./ai_marketing');
+//     aiEngine.initCronJobs();
+// } catch (e) {
+//     console.warn("⚠️ Could not load ai_marketing engine:", e.message);
+// }
 
 // ============ TODO ROUTES ============
 
