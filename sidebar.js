@@ -6,6 +6,8 @@ window.initGlobalSidebar = function() {
 
     const path = window.location.pathname;
     if (path.includes('client-portal.html')) return;
+    if (path.includes('todo.html')) return; // todo.html has its own sidebar
+
     
     // Render sidebar if logged in as admin/superadmin OR as employee with any module permissions
     let userRole = null;

@@ -2703,6 +2703,45 @@ app.delete('/api/todos/:id/attachments/:attachId', anyAuth, async (req, res) => 
     }
 });
 
+// ============ TODO REMINDER CRON (Daily 9 AM IST) ============
+try {
+    const cron = require('node-cron');
+    cron.schedule('0 9 * * *', async () => {
+        console.log('⏰ Running daily todo reminder...');
+        try {
+            const today = new Date(); today.setHours(23,59,59,999);
+            const dueTodos = await Todo.find({ status: { $in: ['todo','in-progress'] }, dueDate: { $lte: today, $ne: null } }).sort({ staffId: 1, dueDate: 1 });
+            if (dueTodos.length === 0) return;
+            const byStaff = {};
+            dueTodos.forEach(t => {
+                const key = t.staffId.toString();
+                if (!byStaff[key]) byStaff[key] = { name: t.staffName, tasks: [] };
+                byStaff[key].tasks.push(t);
+            });
+            const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: SMTP_USER, pass: SMTP_PASS } });
+            for (const [staffId, data] of Object.entries(byStaff)) {
+                const staff = await Staff.findById(staffId).select('email name');
+                if (!staff || !staff.email) continue;
+                const overdueList = data.tasks.map(t => {
+                    const isOverdue = new Date(t.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                    return `<li style="margin:6px 0;">${isOverdue?'🔴 OVERDUE':'📅 Due Today'} — <b>${t.title}</b> (${t.priority} priority)</li>`;
+                }).join('');
+                await transporter.sendMail({
+                    from: `"${SENDER_NAME}" <${SMTP_USER}>`, to: staff.email,
+                    subject: `⏰ ${data.tasks.length} Task Reminder — BookMyCA`,
+                    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0F172A;color:#E2E8F0;border-radius:12px;padding:24px;">
+                        <h2 style="color:#38BDF8;">⏰ Task Reminder</h2>
+                        <p>Hi <b>${staff.name}</b>, you have <b>${data.tasks.length}</b> task(s) pending:</p>
+                        <ul>${overdueList}</ul>
+                        <a href="https://smart-attend-production-fcdb.up.railway.app/todo.html" style="background:#38BDF8;color:#0F172A;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block;margin-top:12px;">Open My To-Do</a>
+                    </div>`
+                });
+            }
+        } catch(e) { console.error('Todo reminder error:', e.message); }
+    }, { timezone: 'Asia/Kolkata' });
+    console.log('⏰ Todo reminder cron scheduled (daily 9 AM IST)');
+} catch(e) { console.warn('node-cron not available:', e.message); }
+
 // ============ START SERVER ============
 const PORT = process.env.PORT || 3847;
 app.listen(PORT, () => {

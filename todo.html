@@ -144,7 +144,7 @@ input:checked+.slider:before{transform:translateX(16px);background:#fff;}
 .attach-uploading{font-size:.75rem;color:#38BDF8;display:flex;align-items:center;gap:6px;padding:4px;}
 
 /* ── Admin view overlay ── */
-.admin-overlay{display:none;position:fixed;inset:0;background:#0F172A;z-index:100;overflow:auto;}
+.admin-overlay{display:none;position:fixed;inset:0;background:#0F172A;z-index:1100;overflow:auto;margin-left:0!important;}
 .admin-overlay.show{display:block;}
 .admin-header{background:#1E293B;padding:20px 24px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center;}
 .admin-header h2{font-size:1.2rem;font-weight:700;color:#38BDF8;}
@@ -246,18 +246,20 @@ input:checked+.slider:before{transform:translateX(16px);background:#fff;}
 
     <!-- Quick Add -->
     <div class="quick-add">
-      <div class="quick-add-row">
-        <i class="fa-solid fa-plus" style="color:#475569;"></i>
-        <input type="text" id="qa-title" placeholder="Add a task… press Enter to save" onkeydown="if(event.key==='Enter')quickAdd()">
+      <div class="quick-add-row" id="qa-row">
+        <i class="fa-solid fa-plus" style="color:#38BDF8;"></i>
+        <input type="text" id="qa-title" placeholder="Task title (required)..." onkeydown="if(event.key==='Enter')quickAdd()" style="flex:1;">
         <select id="qa-list" class="qa-btn" style="background:#334155;border:none;color:#94A3B8;font-size:.8rem;border-radius:6px;padding:4px 6px;">
           <option>Work</option><option>Personal</option><option>Office</option><option>Follow-up</option>
         </select>
         <button class="qa-btn qa-priority medium" id="qa-priority-btn" onclick="cyclePriority()" title="Priority">
           <i class="fa-solid fa-flag"></i> <span id="qa-priority-label">Med</span>
         </button>
-        <input type="date" id="qa-due" class="qa-btn" style="background:#334155;border:none;color:#94A3B8;font-size:.8rem;border-radius:6px;padding:4px 6px;">
-        <button class="qa-btn" onclick="quickAdd()" style="color:#38BDF8;font-weight:700;">Add</button>
+        <span style="color:#EF4444;font-size:.75rem;font-weight:600;" title="Due date is required">📅*</span>
+        <input type="date" id="qa-due" class="qa-btn" required style="background:#334155;border:1.5px solid #EF444460;color:#E2E8F0;font-size:.8rem;border-radius:6px;padding:4px 6px;cursor:pointer;" title="Due date is required">
+        <button class="qa-btn" onclick="quickAdd()" style="color:#fff;background:#38BDF8;padding:5px 10px;border-radius:6px;font-weight:700;">+ Add</button>
       </div>
+      <div id="qa-error" style="color:#EF4444;font-size:.72rem;padding:4px 0 0 0;display:none;">⚠️ Please enter task title and due date</div>
     </div>
 
     <!-- Task List -->
@@ -358,7 +360,7 @@ input:checked+.slider:before{transform:translateX(16px);background:#fff;}
   <div class="admin-table-wrap">
     <table class="admin-table">
       <thead><tr>
-        <th>Employee</th><th>Task</th><th>Priority</th><th>List</th><th>Due Date</th><th>Status</th><th>Created</th>
+        <th>Employee</th><th style="min-width:200px;">Task</th><th>Priority</th><th>List</th><th>Due Date</th><th>Status</th><th>Created</th>
       </tr></thead>
       <tbody id="admin-tbody"></tbody>
     </table>
@@ -482,15 +484,22 @@ function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // ── Quick Add ──
 async function quickAdd() {
   const title = document.getElementById('qa-title').value.trim();
-  if (!title) return;
+  const due = document.getElementById('qa-due').value;
+  const errEl = document.getElementById('qa-error');
+  if (!title || !due) {
+    errEl.style.display = 'block';
+    if (!title) document.getElementById('qa-title').style.border = '1.5px solid #EF4444';
+    if (!due) document.getElementById('qa-due').style.border = '1.5px solid #EF4444';
+    setTimeout(() => { errEl.style.display='none'; document.getElementById('qa-title').style.border=''; document.getElementById('qa-due').style.border='1.5px solid #EF444460'; }, 3000);
+    return;
+  }
   const priority = priorities[currentPriorityIdx];
   const list = document.getElementById('qa-list').value;
-  const due = document.getElementById('qa-due').value;
   try {
     const r = await fetch(`${API}/api/todos`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', Authorization:'Bearer '+token },
-      body: JSON.stringify({ title, priority, list, dueDate: due||null, isMyDay: false, isImportant: false })
+      body: JSON.stringify({ title, priority, list, dueDate: due, isMyDay: false, isImportant: false })
     });
     const d = await r.json();
     if (d.success) {
@@ -759,7 +768,26 @@ function downloadAttachment(a) {
 }
 
 // ── Init ──
-loadTodos();
+async function init() {
+  await loadTodos();
+  // Overdue reminder toast
+  setTimeout(() => {
+    const overdue = allTodos.filter(t => t.status !== 'done' && t.dueDate && new Date(t.dueDate) < new Date());
+    if (overdue.length > 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: `⏰ ${overdue.length} Overdue Task${overdue.length > 1 ? 's' : ''}!`,
+        html: overdue.slice(0,5).map(t => `• <b>${escHtml(t.title)}</b> (due ${new Date(t.dueDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})})`).join('<br>') + (overdue.length > 5 ? `<br>...and ${overdue.length-5} more` : ''),
+        background: '#1E293B', color: '#E2E8F0',
+        confirmButtonColor: '#EF4444',
+        confirmButtonText: 'View Overdue',
+        showCancelButton: true, cancelButtonText: 'Dismiss',
+        cancelButtonColor: '#334155'
+      }).then(r => { if (r.isConfirmed) setFilter('planned', document.querySelector('[data-filter="planned"]')); });
+    }
+  }, 800);
+}
+init();
 </script>
 </body>
 </html>
