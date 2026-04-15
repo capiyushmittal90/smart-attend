@@ -310,14 +310,14 @@ const transporter = nodemailer.createTransport({
     secure: false,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
     tls: { rejectUnauthorized: false },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 8000
 });
 
 transporter.verify((err) => {
     if (err) {
-        console.error('❌ SMTP connection failed:', err.message);
+        console.warn('⚠️ SMTP verify failed (email may not work):', err.message);
     } else {
         console.log('✅ SMTP connected — ready to send emails via', SMTP_USER);
     }
@@ -2743,8 +2743,12 @@ try {
 } catch(e) { console.warn('node-cron not available:', e.message); }
 
 // ============ START SERVER ============
+// ============ START SERVER ============
+// Health check endpoint for Railway
+app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+
 const PORT = process.env.PORT || 3847;
-app.listen(PORT, () => {
-    console.log(`\n🚀 BookMyCA Smart Attend Server v4.0 running at http://localhost:${PORT}\n`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🚀 BookMyCA Smart Attend Server v4.0 running at http://0.0.0.0:${PORT}\n`);
 });
 
