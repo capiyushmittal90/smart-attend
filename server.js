@@ -1193,6 +1193,29 @@ app.delete('/api/settings/holidays/:date', adminAuth, async (req, res) => {
     res.json({ success: true, holidays: settings ? settings.holidays : [] });
 });
 
+// ============ ATTENDANCE REGISTER ENGINE ============
+// Get raw attendance register data for a specific month
+app.get('/api/attendance/register/:month', adminAuth, async (req, res) => {
+    try {
+        const { month } = req.params; // format: YYYY-MM
+        const [year, m] = month.split('-').map(Number);
+        if (!year || !m) return res.status(400).json({ error: 'Invalid month (YYYY-MM)' });
+
+        const regexDate = new RegExp(`^[0-3][0-9]/${m.toString().padStart(2, '0')}/${year}$`);
+        const staffList = await Staff.find({ active: true }).select('name department');
+        const logsIn = await AttendanceLog.find({ type: 'IN', date: regexDate }).select('date time staffId status');
+        const logsOut = await AttendanceLog.find({ type: 'OUT', date: regexDate }).select('date time staffId status');
+        const approvedLeaves = await LeaveRequest.find({ status: 'approved', date: regexDate }).select('date staffId type');
+
+        const settings = await Settings.findOne({ key: 'global' });
+        const holidays = settings?.holidays?.filter(h => h.date.startsWith(month)) || [];
+
+        res.json({ success: true, staff: staffList, logsIn, logsOut, leaves: approvedLeaves, holidays });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ============ PAYROLL CALCULATION ENGINE ============
 app.get('/api/payroll/calculate/:month', adminAuth, async (req, res) => {
     try {

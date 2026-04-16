@@ -36,6 +36,19 @@
 
     .aging-bar { height:8px;border-radius:99px;overflow:hidden;background:#F1F5F9;margin-bottom:4px; }
     .aging-fill { height:100%;border-radius:99px; }
+
+    /* Attendance Paper Style Register */
+    .att-reg-table { width:100%; border-collapse: collapse; font-size: 0.75rem; background-color: #f1f8f1; /* Light green paper */ }
+    .att-reg-table th, .att-reg-table td { border: 1px solid #c8dbc8; text-align: center; vertical-align: middle; padding: 4px; }
+    .att-reg-table th { background-color: #e2efe2; font-weight: bold; color: #334155; position: sticky; top: 0; z-index: 10; }
+    .att-reg-table th.emp-col, .att-reg-table td.emp-col { position: sticky; left: 0; background-color: #e2efe2; z-index: 11; font-weight: bold; text-align: left; width: 150px; min-width: 150px; }
+    .att-reg-status-p { color: #16A34A; font-weight: bold; font-size: 1rem; }
+    .att-reg-status-a { color: #DC2626; font-weight: bold; font-size: 1rem; }
+    .att-reg-status-hd { color: #D97706; font-weight: bold; font-size: 1rem; }
+    .att-reg-status-s { color: #94A3B8; font-weight: bold; font-size: 0.9rem; }
+    .att-reg-time { display: block; font-size: 0.6rem; color: #64748B; margin-top: 2px; line-height: 1.1; }
+    
+    .att-filter-bar { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
   </style>
 </head>
 <body>
@@ -103,6 +116,7 @@
     <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('payments',this)"><i class="fa-solid fa-money-bill me-1"></i>Payments</a></li>
     <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('aging',this)"><i class="fa-solid fa-clock me-1"></i>Invoice Aging</a></li>
     <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('gst',this)"><i class="fa-solid fa-building-columns me-1"></i>GST Summary</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('attendance-register',this)"><i class="fa-solid fa-clipboard-list me-1"></i>Attendance Register</a></li>
   </ul>
 
   <!-- Tab: Revenue -->
@@ -130,6 +144,30 @@
     <div class="table-responsive"><table id="gstTbl" class="table w-100"><thead><tr><th>Invoice No</th><th>Client</th><th>GSTIN</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th></tr></thead><tbody id="gstBody"></tbody></table></div>
   </div>
 
+  <!-- Tab: Attendance Register (Paper Style) -->
+  <div id="tab-attendance-register" class="rpt-card" style="display:none; padding: 10px;">
+    <div class="att-filter-bar px-2">
+      <div>
+        <label class="form-label fw-semibold small text-muted mb-1">Select Month</label>
+        <input type="month" id="attRegMonth" class="form-control" onchange="loadAttendanceRegister()">
+      </div>
+      <div>
+        <button class="btn btn-navy" onclick="loadAttendanceRegister()"><i class="fa-solid fa-rotate-right me-1"></i> Refresh</button>
+      </div>
+    </div>
+    
+    <div id="attRegLoader" style="display:none; padding:40px; text-align:center; color:#64748B;">
+      <i class="fa-solid fa-circle-notch fa-spin fa-2x mb-2"></i><br>Loading attendance register...
+    </div>
+
+    <div class="table-responsive" style="max-height: 70vh;">
+      <table class="att-reg-table" id="attRegTable">
+        <thead id="attRegHead"></thead>
+        <tbody id="attRegBody"></tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
@@ -148,6 +186,11 @@ window.addEventListener('DOMContentLoaded', async()=>{
   if(!token){window.location.href='index.html';return;}
   // Admin check
   try{const p=JSON.parse(atob(token.split('.')[1]));if(p.type!=='admin'&&p.role!=='superadmin'){Swal.fire('Access','Admin only','error').then(()=>window.location.href='index.html');return;}}catch(_){}
+  
+  // Set default month for attendance register
+  const now = new Date();
+  document.getElementById('attRegMonth').value = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}`;
+  
   loadReport();
 });
 
@@ -280,8 +323,138 @@ function renderGST(){
 function switchTab(tab,el){
   document.querySelectorAll('.nav-pills .nav-link').forEach(a=>a.classList.remove('active'));
   el.classList.add('active');
-  ['revenue','invoices','payments','aging','gst'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
-  activeTab=tab;return false;
+  ['revenue','invoices','payments','aging','gst','attendance-register'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'':'none');
+  activeTab=tab;
+  
+  // Load specialized data if needed
+  if(tab === 'attendance-register') {
+      loadAttendanceRegister();
+  }
+  return false;
+}
+
+// ==============================
+// ATTENDANCE REGISTER LOGIC
+// ==============================
+async function loadAttendanceRegister() {
+  const monthVal = document.getElementById('attRegMonth').value;
+  if (!monthVal) return;
+  const [year, monthNum] = monthVal.split('-').map(Number);
+  
+  document.getElementById('attRegTable').style.display = 'none';
+  document.getElementById('attRegLoader').style.display = 'block';
+
+  try {
+    const res = await fetch(`${API}/api/attendance/register/${monthVal}`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to load');
+
+    renderAttendanceMatrix(year, monthNum, data);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('attRegBody').innerHTML = `<tr><td colspan="32" class="text-danger py-4">Error loading data: ${err.message}</td></tr>`;
+  }
+  
+  document.getElementById('attRegLoader').style.display = 'none';
+  document.getElementById('attRegTable').style.display = 'table';
+}
+
+function renderAttendanceMatrix(year, month, data) {
+  const { staff, logsIn, logsOut, leaves, holidays } = data;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  
+  // Maps for O(1) lookups
+  const logInMap = {}; 
+  const logOutMap = {};
+  const leaveMap = {}; // "staffId_day" -> "HD" / "FD"
+
+  logsIn.forEach(L => {
+      const d = parseInt(L.date.substring(0, 2), 10);
+      logInMap[`${L.staffId}_${d}`] = { time: L.time, status: L.status }; // LATE / ON TIME
+  });
+  logsOut.forEach(L => {
+      const d = parseInt(L.date.substring(0, 2), 10);
+      logOutMap[`${L.staffId}_${d}`] = { time: L.time, status: L.status }; // EARLY / OK
+  });
+  leaves.forEach(L => {
+      const d = parseInt(L.date.substring(0, 2), 10);
+      leaveMap[`${L.staffId}_${d}`] = L.type === 'Half Day' ? 'HD' : 'FD';
+  });
+
+  // Calculate Sundays & Holidays
+  const isOffDayList = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+      const dObj = new Date(year, month - 1, d);
+      const isSun = dObj.getDay() === 0;
+      const dStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+      const isHol = holidays.some(h => h.date === dStr);
+      isOffDayList[d] = isSun || isHol;
+  }
+
+  // BUILD HEADER
+  let htmlHead = `<tr><th class="emp-col">Employee Name</th>`;
+  for(let d=1; d<=daysInMonth; d++) {
+      const color = isOffDayList[d] ? 'color: #DC2626;' : ''; // Red text for Sun/Holiday
+      htmlHead += `<th style="${color}">${d}</th>`;
+  }
+  htmlHead += `<th>P</th><th>A</th><th>HD</th></tr>`;
+  document.getElementById('attRegHead').innerHTML = htmlHead;
+
+  // BUILD BODY
+  let htmlBody = '';
+  staff.forEach(emp => {
+      let totP = 0, totA = 0, totHD = 0;
+      let row = `<tr><td class="emp-col">${emp.name}<br><small style="color:#64748B; font-weight:normal;">${emp.department || ''}</small></td>`;
+      
+      for(let d=1; d<=daysInMonth; d++) {
+          const key = `${emp._id}_${d}`;
+          const inData = logInMap[key];
+          const outData = logOutMap[key];
+          const lvData = leaveMap[key];
+          const isOff = isOffDayList[d];
+
+          let mark = '';
+          let cssClass = '';
+          let timeInfo = '';
+
+          if (lvData === 'HD') {
+              mark = 'HD'; cssClass = 'att-reg-status-hd'; totHD++;
+              timeInfo = (inData? `<br><span class="att-reg-time">In: ${inData.time}</span>`:'') + 
+                         (outData? `<span class="att-reg-time">Out: ${outData.time}</span>`:'');
+          } 
+          else if (lvData === 'FD') {
+              mark = 'L/A'; cssClass = 'att-reg-status-a'; totA++; // Full day leave counted as absent or leave
+          }
+          else if (inData) {
+              mark = 'P'; cssClass = 'att-reg-status-p'; totP++;
+              timeInfo = `<br><span class="att-reg-time">In: ${inData.time}</span>` + 
+                         (outData? `<span class="att-reg-time">Out: ${outData.time}</span>`:'');
+          }
+          else {
+              // No punch. Is it a holiday or future?
+              const checkDate = new Date(year, month - 1, d);
+              const now = new Date();
+              now.setHours(0,0,0,0);
+              
+              if (checkDate > now) {
+                  mark = ''; // future day
+              } else if (isOff) {
+                  mark = 'S'; cssClass = 'att-reg-status-s'; // Sunday/Holiday
+              } else {
+                  mark = 'A'; cssClass = 'att-reg-status-a'; totA++;
+              }
+          }
+
+          row += `<td><span class="${cssClass}">${mark}</span> ${timeInfo}</td>`;
+      }
+      
+      row += `<td style="font-weight:bold;">${totP}</td><td style="font-weight:bold;">${totA}</td><td style="font-weight:bold;">${totHD}</td></tr>`;
+      htmlBody += row;
+  });
+
+  document.getElementById('attRegBody').innerHTML = htmlBody;
 }
 
 function exportCSV(){
