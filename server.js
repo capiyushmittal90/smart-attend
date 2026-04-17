@@ -2772,7 +2772,7 @@ try {
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
 const PORT = process.env.PORT || 3847;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🚀 BookMyCA Smart Attend Server v4.0 running at http://0.0.0.0:${PORT}\n`);
+app.listen(PORT, () => {
+    console.log(`\n🚀 BookMyCA Smart Attend Server v4.0 running at port ${PORT}\n`);
 });
 
