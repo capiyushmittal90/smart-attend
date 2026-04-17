@@ -4,6 +4,16 @@
    ============================================= */
 
 require('dotenv').config();
+
+process.on('uncaughtException', (err) => {
+    console.error('🔥 UNCAUGHT EXCEPTION 🔥:', err);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🔥 UNHANDLED REJECTION 🔥 at:', promise, 'reason:', reason);
+});
+
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
@@ -314,13 +324,9 @@ const transporter = nodemailer.createTransport({
     greetingTimeout: 5000,
     socketTimeout: 8000
 });
-
 transporter.verify((err) => {
-    if (err) {
-        console.warn('⚠️ SMTP verify failed (email may not work):', err.message);
-    } else {
-        console.log('✅ SMTP connected — ready to send emails via', SMTP_USER);
-    }
+    // Disabled verify on startup to prevent potential Railway timeouts/restarts
+    // if (err) console.warn('⚠️ SMTP verify failed:', err.message);
 });
 
 // ============ OTP STORE (in-memory) ============
@@ -2772,7 +2778,11 @@ try {
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
 const PORT = process.env.PORT || 3847;
-app.listen(PORT, () => {
+const serverInit = app.listen(PORT, () => {
     console.log(`\n🚀 BookMyCA Smart Attend Server v4.0 running at port ${PORT}\n`);
+});
+
+serverInit.on('error', (err) => {
+    console.error('❌ Server failed to start or listener error:', err);
 });
 
