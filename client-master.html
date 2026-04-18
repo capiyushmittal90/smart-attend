@@ -266,16 +266,40 @@
                 <!-- Uploader Form Panel (Hidden by default) -->
                 <div id="uploadOutputPanel" class="border rounded-3 p-3 bg-white shadow-sm mb-4" style="display:none;">
                     <h6 class="fw-bold text-dark small mb-3">Upload Output Document</h6>
-                    <div class="mb-3">
+                    
+                    <!-- Invoice Type Toggle -->
+                    <div class="mb-3 d-flex gap-3 pb-2 border-bottom">
+                        <label class="form-check-label small fw-semibold"><input type="radio" name="invSource" value="internal" class="form-check-input me-1" checked onchange="toggleInvSource()"> BookMyCA Invoice</label>
+                        <label class="form-check-label small fw-semibold"><input type="radio" name="invSource" value="external" class="form-check-input me-1" onchange="toggleInvSource()"> Upload External Bill</label>
+                    </div>
+
+                    <!-- Internal Source Panel -->
+                    <div id="panelInvInternal" class="mb-3">
                         <label class="form-label small text-muted fw-semibold">1. Select Invoice (Must exist for this client)</label>
                         <select id="vInvoiceSelect" class="form-select form-select-sm"></select>
                         <div class="mt-2 text-end">
                             <a href="invoice-builder.html" target="_blank" class="small text-decoration-none"><i class="fa-solid fa-share-from-square me-1"></i>Generate New Invoice First</a>
                         </div>
                     </div>
+
+                    <!-- External Source Panel (Hidden default) -->
+                    <div id="panelInvExternal" class="mb-3 p-3 border rounded bg-light" style="display:none;">
+                        <label class="form-label small text-muted fw-semibold mb-2">1. External Software Invoice Details</label>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <input type="text" id="extInvNo" class="form-control form-control-sm border-secondary" placeholder="Invoice Number (e.g. TLY-50)">
+                            </div>
+                            <div class="col-6">
+                                <input type="number" id="extInvAmount" class="form-control form-control-sm border-secondary" placeholder="Total Amount (₹)">
+                            </div>
+                        </div>
+                        <input type="file" id="extInvFile" class="form-control form-control-sm border-secondary" accept="application/pdf">
+                        <div class="form-text small mt-1">Upload the PDF bill from Tally/Zoho/etc.</div>
+                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label small text-muted fw-semibold">2. Select File</label>
-                        <input type="file" id="vOutputFile" class="form-control form-control-sm">
+                        <label class="form-label small text-muted fw-semibold">2. Select Output Working File (Report, Tally Data, etc.)</label>
+                        <input type="file" id="vOutputFile" class="form-control form-control-sm border-primary" style="background:#F0F9FF;">
                     </div>
                     <div class="d-flex gap-2 justify-content-end">
                         <button class="btn btn-sm btn-light" onclick="$('#uploadOutputPanel').slideUp()">Cancel</button>
@@ -706,7 +730,7 @@ async function showOutputUploader() {
         const data = await r.json();
         if(data.success && data.invoices.length > 0) {
             sel.innerHTML = '<option value="">-- Select Invoice to Link Output --</option>' + 
-                data.invoices.map(inv => `<option value="${inv._id}">${inv.invoiceNo} - (₹${inv.totalAmount}) [${inv.status}]</option>`).join('');
+                data.invoices.map(inv => `<option value="${inv._id}">${inv.invoiceNo} - (₹${inv.totalAmount}) [${inv.status}]${inv.isExternal?' (External)':''}</option>`).join('');
         } else {
              sel.innerHTML = '<option value="">❌ No Invoices Found. Please Create One First.</option>';
         }
@@ -715,23 +739,59 @@ async function showOutputUploader() {
     }
 }
 
+function toggleInvSource() {
+    const src = document.querySelector('input[name="invSource"]:checked').value;
+    if (src === 'internal') {
+        document.getElementById('panelInvInternal').style.display = 'block';
+        document.getElementById('panelInvExternal').style.display = 'none';
+    } else {
+        document.getElementById('panelInvInternal').style.display = 'none';
+        document.getElementById('panelInvExternal').style.display = 'block';
+    }
+}
+
 async function submitOutputUpload() {
-    const invoiceId = document.getElementById('vInvoiceSelect').value;
     const fileEl = document.getElementById('vOutputFile');
-    
-    if (!invoiceId) {
-        return Swal.fire('Required', 'You MUST select an Invoice to link this Output. If none exists, click "Generate New Invoice First".', 'warning');
-    }
     if (!fileEl.files[0]) {
-        return Swal.fire('Required', 'Please select a file to upload.', 'warning');
+        return Swal.fire('Required', 'Please select an Output file to upload.', 'warning');
+    }
+
+    const source = document.querySelector('input[name="invSource"]:checked').value;
+    let finalInvoiceId = '';
+
+    if (source === 'internal') {
+        finalInvoiceId = document.getElementById('vInvoiceSelect').value;
+        if (!finalInvoiceId) return Swal.fire('Required', 'You MUST select an Invoice to link this Output.', 'warning');
+    } else {
+        const extNo = document.getElementById('extInvNo').value.trim();
+        const extAmt = document.getElementById('extInvAmount').value;
+        const extFile = document.getElementById('extInvFile').files[0];
+        
+        if (!extNo || !extAmt || !extFile) return Swal.fire('Required', 'Please complete all External Invoice fields including the PDF file.', 'warning');
+
+        // Create External Invoice
+        const extData = new FormData();
+        extData.append('invoiceNo', extNo);
+        extData.append('totalAmount', extAmt);
+        extData.append('file', extFile);
+        extData.append('clientId', activeVaultClientId);
+
+        Swal.fire({ title: 'Uploading External Invoice...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const extRes = await fetch(`${API}/api/invoices/external`, { method:'POST', headers:{'Authorization':'Bearer '+token}, body:extData });
+            const dExt = await extRes.json();
+            if(!dExt.success) return Swal.fire('Error', dExt.error, 'error');
+            finalInvoiceId = dExt.invoiceId;
+        } catch(e) { return Swal.fire('Error', 'Server error uploading external invoice', 'error'); }
     }
     
+    // Now upload the Output itself
     const formData = new FormData();
     formData.append('file', fileEl.files[0]);
     formData.append('clientId', activeVaultClientId);
-    formData.append('linkedInvoiceId', invoiceId);
+    formData.append('linkedInvoiceId', finalInvoiceId);
     
-    Swal.fire({ title: 'Uploading Output...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: 'Uploading Output...', text: 'Finalizing deployment...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
         const r = await fetch(`${API}/api/files/upload/output`, {

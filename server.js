@@ -1968,6 +1968,8 @@ app.get('/api/routines/report', adminAuth, async (req, res) => {
 // --- Invoice Schema ---
 const invoiceSchema = new mongoose.Schema({
     invoiceNo:      { type: String, required: true, unique: true },
+    isExternal:     { type: Boolean, default: false },
+    externalPdfPath:{ type: String, default: null },
     taskId:         { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
     clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
     invoiceType:    { type: String, enum: ['GST','NON_GST'], default: 'GST' },
@@ -2129,6 +2131,34 @@ app.get('/api/invoices', anyAuth, async (req, res) => {
         invoices.forEach(inv => { totalBilled+=inv.totalAmount; if(inv.status==='Paid') totalPaid+=inv.totalAmount; else if(inv.status!=='Cancelled') totalPending+=inv.totalAmount; });
         res.json({ success:true, invoices, kpis:{ total:invoices.length, totalBilled, totalPaid, totalPending } });
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Upload External Invoice ───────────────────────────────────────
+app.post('/api/invoices/external', anyAuth, fileUpload.single('file'), async (req, res) => {
+    try {
+        const { clientId, invoiceNo, totalAmount } = req.body;
+        if (!clientId || !invoiceNo || !totalAmount) return res.status(400).json({ error: 'Missing required invoice details' });
+        if (!req.file) return res.status(400).json({ error: 'Invoice PDF file is required' });
+
+        const existing = await Invoice.findOne({ invoiceNo });
+        if (existing) return res.status(400).json({ error: `Invoice number ${invoiceNo} already exists in records.` });
+
+        const newInvoice = new Invoice({
+            invoiceNo,
+            clientId,
+            isExternal: true,
+            externalPdfPath: '/uploads/' + req.file.filename,
+            totalAmount: Number(totalAmount),
+            status: 'Sent',
+            createdBy: req.user.id,
+            lineItems: [{ description: 'External Services Billed', qty: 1, rate: Number(totalAmount), amount: Number(totalAmount) }]
+        });
+        
+        await newInvoice.save();
+        res.json({ success: true, invoiceId: newInvoice._id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ── Get single invoice ──────────────────────────────────────────
