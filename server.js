@@ -1387,13 +1387,18 @@ app.get('/api/clients', anyAuth, async (req, res) => {
         // Check if the user is a staff member with explicit RBAC permissions
         if (!hasFullAccess && req.user.type === 'employee') {
             const staff = await Staff.findById(req.user.id);
-            if (staff && staff.permissions && staff.permissions.modules) {
-                const clientMod = staff.permissions.modules.find(m => m.name === 'clientMaster');
-                if (clientMod && clientMod.read) {
+            if (staff) {
+                if (staff.isTeamAdmin) {
                     hasFullAccess = true;
-                }
-                if (clientMod && clientMod.edit) {
                     hasEditAccess = true;
+                } else if (staff.permissions && staff.permissions.modules) {
+                    const clientMod = staff.permissions.modules.find(m => m.name === 'client-master');
+                    if (clientMod && clientMod.read) {
+                        hasFullAccess = true;
+                    }
+                    if (clientMod && clientMod.edit) {
+                        hasEditAccess = true;
+                    }
                 }
             }
         }
