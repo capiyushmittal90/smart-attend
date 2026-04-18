@@ -220,9 +220,75 @@
       </div>
       <div class="modal-footer bg-white border-0">
         <button class="btn btn-light" data-bs-dismiss="modal">Close</button>
+        <button class="btn btn-outline-primary" id="btnVaultFromView">
+          <i class="fa-solid fa-vault me-1"></i>Data Vault
+        </button>
         <button class="btn btn-navy" id="btnEditFromView">
           <i class="fa-solid fa-pen me-1"></i>Edit Client
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DATA VAULT MODAL (Staff Side) -->
+<div class="modal fade" id="staffVaultModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header text-white border-0 py-3" style="background:#0F172A;">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-vault me-2 text-info"></i>Client Data Vault <span id="vClientName" class="fs-6 fw-normal ms-2 text-white-50"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" style="background:#F8FAFC; min-height:500px;">
+        <div class="row g-0 h-100">
+            <!-- Left Side: Inputs (Docs from Client) -->
+            <div class="col-md-5 border-end bg-white p-4">
+                <h6 class="fw-bold mb-3"><i class="fa-solid fa-cloud-arrow-down text-primary me-2"></i>Inputs from Client</h6>
+                <p class="text-muted small">Documents like PAN, Aadhar, ITRs, Bills uploaded by the client via their portal.</p>
+                <div id="staffVaultInputs" style="max-height:400px;overflow-y:auto;padding-right:10px;">
+                    <!-- Input items -->
+                </div>
+            </div>
+            <!-- Right Side: Outputs (Workings to Client) -->
+            <div class="col-md-7 p-4">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-export text-success me-2"></i>Delivered Outputs</h6>
+                        <p class="text-muted small mb-0">Upload final workings here. <b>Mandatory:</b> You must link an Invoice before uploading.</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-navy fw-semibold shadow-sm" onclick="showOutputUploader()">
+                            <i class="fa-solid fa-cloud-arrow-up me-1"></i> New Upload
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Uploader Form Panel (Hidden by default) -->
+                <div id="uploadOutputPanel" class="border rounded-3 p-3 bg-white shadow-sm mb-4" style="display:none;">
+                    <h6 class="fw-bold text-dark small mb-3">Upload Output Document</h6>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">1. Select Invoice (Must exist for this client)</label>
+                        <select id="vInvoiceSelect" class="form-select form-select-sm"></select>
+                        <div class="mt-2 text-end">
+                            <a href="invoice-builder.html" target="_blank" class="small text-decoration-none"><i class="fa-solid fa-share-from-square me-1"></i>Generate New Invoice First</a>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">2. Select File</label>
+                        <input type="file" id="vOutputFile" class="form-control form-control-sm">
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button class="btn btn-sm btn-light" onclick="$('#uploadOutputPanel').slideUp()">Cancel</button>
+                        <button class="btn btn-sm btn-success fw-semibold" onclick="submitOutputUpload()"><i class="fa-solid fa-upload me-1"></i>Upload & Lock</button>
+                    </div>
+                </div>
+                
+                <!-- Output Files List -->
+                <div id="staffVaultOutputs" style="max-height:300px;overflow-y:auto;padding-right:10px;">
+                    <!-- Output items -->
+                </div>
+            </div>
+        </div>
       </div>
     </div>
   </div>
@@ -340,6 +406,7 @@ function renderTable(clients) {
         <td class="small">${c.phone||'—'}</td>
         <td>${svcs||'<span class="text-muted small">—</span>'}</td>
         <td>
+          <button class="btn btn-sm btn-light border text-primary me-1" onclick="openStaffVault('${c._id}')" title="Data Vault"><i class="fa-solid fa-vault"></i></button>
           <button class="btn btn-sm btn-out-navy me-1" onclick="viewClient('${c._id}')" title="View"><i class="fa-solid fa-eye"></i></button>
           ${editBtn}
           <button class="btn btn-sm btn-outline-success" onclick="loginAsClient('${c._id}')" title="Login as Client (Proxy)"><i class="fa-solid fa-arrow-right-to-bracket"></i></button>
@@ -490,6 +557,7 @@ function viewClient(id) {
       </div>
     </div>
   `;
+  document.getElementById('btnVaultFromView').onclick = () => openStaffVault(id);
   if (hasEditAccess) {
       document.getElementById('btnEditFromView').onclick = () => editClient(id);
       document.getElementById('btnEditFromView').style.display = 'inline-block';
@@ -528,6 +596,205 @@ async function loginAsClient(id) {
     } catch(e) {
         console.error(e);
         Swal.fire('Error', 'Server unreachable.', 'error');
+    }
+}
+
+// ======================== VAULT LOCIC ========================
+let activeVaultClientId = null;
+
+async function openStaffVault(clientId) {
+    const c = allClients.find(x => x._id === clientId);
+    if (!c) return;
+    activeVaultClientId = clientId;
+    document.getElementById('vClientName').textContent = `- ${c.clientName}`;
+    document.getElementById('uploadOutputPanel').style.display = 'none';
+    
+    // Reset file input
+    document.getElementById('vOutputFile').value = '';
+    
+    new bootstrap.Modal(document.getElementById('staffVaultModal')).show();
+    await fetchVaultData(clientId);
+}
+
+async function fetchVaultData(clientId) {
+    const inBox = document.getElementById('staffVaultInputs');
+    const outBox = document.getElementById('staffVaultOutputs');
+    inBox.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span></div>';
+    outBox.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-success"></span></div>';
+    
+    try {
+        const res = await fetch(`${API}/api/clients/${clientId}/vault`, { headers:{'Authorization': 'Bearer '+token} });
+        const data = await res.json();
+        if (data.success) {
+            renderVaultData(data.files);
+        } else {
+            inBox.innerHTML = outBox.innerHTML = `<div class="alert alert-danger small">Error: ${data.error}</div>`;
+        }
+    } catch(e) {
+        inBox.innerHTML = outBox.innerHTML = `<div class="alert alert-danger small">Network error</div>`;
+    }
+}
+
+function renderVaultData(files) {
+    const inBox = document.getElementById('staffVaultInputs');
+    const outBox = document.getElementById('staffVaultOutputs');
+    
+    const inputs = files.filter(f => f.folder === 'input');
+    const outputs = files.filter(f => f.folder === 'output');
+    
+    if (inputs.length === 0) {
+        inBox.innerHTML = '<p class="text-muted small">No inputs uploaded by client yet.</p>';
+    } else {
+        inBox.innerHTML = inputs.map(f => `
+        <div class="d-flex align-items-center justify-content-between p-2 mb-2 border rounded bg-light">
+            <div class="pe-2 text-truncate">
+                <div class="fw-semibold small" title="${f.originalName}">${f.originalName}</div>
+                <div class="text-muted" style="font-size:0.65rem;">Uploaded ${new Date(f.createdAt).toLocaleDateString()}</div>
+            </div>
+            <a href="${API}/api/files/download/${f._id}?token=${token}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-download"></i></a>
+        </div>`).join('');
+    }
+    
+    let isAdmin = false;
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (payload.role === 'superadmin' || payload.type === 'admin' || payload.isTeamAdmin) isAdmin = true;
+
+    if (outputs.length === 0) {
+        outBox.innerHTML = '<p class="text-muted small">No delivered outputs yet.</p>';
+    } else {
+        outBox.innerHTML = outputs.map(f => {
+            const isLocked = f.paymentLocked === true;
+            let statusHtml = '';
+            
+            if (isLocked) {
+                statusHtml = `<span class="badge bg-warning text-dark me-2 border border-warning"><i class="fa-solid fa-lock me-1"></i>Client Locked</span>`;
+                if (isAdmin) {
+                    statusHtml += `<button class="btn btn-sm btn-dark text-warning border-0 p-1 px-2 me-1" onclick="adminUnlockFile('${f._id}')" title="Manually Unlock"><i class="fa-solid fa-key"></i> Unlock</button>`;
+                }
+            } else {
+                statusHtml = `<span class="badge bg-success bg-opacity-10 text-success me-2 border border-success"><i class="fa-solid fa-lock-open me-1"></i>Unlocked</span>`;
+                if (f.unlockDetails && f.unlockDetails.method) {
+                     statusHtml += `<div class="mt-1" style="font-size:0.6rem; color:#10B981;">Via: ${f.unlockDetails.method} (${f.unlockDetails.referenceNo||'N/A'})</div>`;
+                }
+            }
+
+            return `
+            <div class="d-flex p-2 mb-2 border rounded" style="background:${isLocked?'#FFFBEB':'#F8FAFC'}; border-color:${isLocked?'#FCD34D':'#E2E8F0'}!important;">
+                <div class="flex-grow-1 text-truncate pe-2">
+                    <div class="fw-semibold small" title="${f.originalName}">${f.originalName}</div>
+                    <div class="text-muted" style="font-size:0.65rem;">By ${f.uploadedByName} on ${new Date(f.createdAt).toLocaleDateString()}</div>
+                    ${f.linkedInvoiceId ? `<div class="fw-bold text-danger mt-1" style="font-size:0.65rem;">Invoice: ${f.linkedInvoiceId.invoiceNo} (₹${f.linkedInvoiceId.totalAmount}) - [${f.linkedInvoiceId.status}]</div>` : ''}
+                </div>
+                <div class="text-end" style="min-width:130px;">
+                    ${statusHtml}
+                    <a href="${API}/api/files/download/${f._id}?token=${token}" target="_blank" class="btn btn-sm btn-outline-success mt-1 p-1 px-2"><i class="fa-solid fa-download"></i> View</a>
+                </div>
+            </div>`;
+        }).join('');
+    }
+}
+
+async function showOutputUploader() {
+    document.getElementById('uploadOutputPanel').style.display = 'block';
+    
+    // Fetch Invoices for this client
+    const sel = document.getElementById('vInvoiceSelect');
+    sel.innerHTML = '<option>Loading invoices...</option>';
+    
+    try {
+        const r = await fetch(`${API}/api/invoices?clientId=${activeVaultClientId}`, { headers:{'Authorization': 'Bearer '+token} });
+        const data = await r.json();
+        if(data.success && data.invoices.length > 0) {
+            sel.innerHTML = '<option value="">-- Select Invoice to Link Output --</option>' + 
+                data.invoices.map(inv => `<option value="${inv._id}">${inv.invoiceNo} - (₹${inv.totalAmount}) [${inv.status}]</option>`).join('');
+        } else {
+             sel.innerHTML = '<option value="">❌ No Invoices Found. Please Create One First.</option>';
+        }
+    } catch(e) {
+        sel.innerHTML = '<option value="">Failed to fetch invoices</option>';
+    }
+}
+
+async function submitOutputUpload() {
+    const invoiceId = document.getElementById('vInvoiceSelect').value;
+    const fileEl = document.getElementById('vOutputFile');
+    
+    if (!invoiceId) {
+        return Swal.fire('Required', 'You MUST select an Invoice to link this Output. If none exists, click "Generate New Invoice First".', 'warning');
+    }
+    if (!fileEl.files[0]) {
+        return Swal.fire('Required', 'Please select a file to upload.', 'warning');
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileEl.files[0]);
+    formData.append('clientId', activeVaultClientId);
+    formData.append('linkedInvoiceId', invoiceId);
+    
+    Swal.fire({ title: 'Uploading Output...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const r = await fetch(`${API}/api/files/upload/output`, {
+            method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: formData
+        });
+        const data = await r.json();
+        if (data.success) {
+            Swal.fire('Success', 'File Uploaded! It will be locked for the client if Invoice is unpaid.', 'success');
+            document.getElementById('uploadOutputPanel').style.display = 'none';
+            fetchVaultData(activeVaultClientId);
+        } else {
+            Swal.fire('Error', data.error || 'Failed to upload', 'error');
+        }
+    } catch(e) {
+        Swal.fire('Error', 'Connection failed', 'error');
+    }
+}
+
+async function adminUnlockFile(fileId) {
+    const { value: formValues } = await Swal.fire({
+      title: 'Manual Access Unlock',
+      html: `
+        <div class="text-danger small mb-3"><b>WARNING:</b> This will permanently grant the client access to download this file.</div>
+        <select id="unlockMethod" class="form-select form-select-sm mb-3">
+            <option value="">Select Payment Method Received...</option>
+            <option value="Cash">Cash Handover</option>
+            <option value="NEFT/RTGS/IMPS">NEFT / RTGS / IMPS</option>
+            <option value="UPI">UPI Transfer</option>
+            <option value="AdminOverride">General Override (Zero Val)</option>
+        </select>
+        <input id="unlockRef" class="form-control form-control-sm" placeholder="Reference No / UTR No (Required)">
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: '<i class="fa-solid fa-key me-1"></i> Verify & Unlock',
+      confirmButtonColor: '#10B981',
+      preConfirm: () => {
+        const method = document.getElementById('unlockMethod').value;
+        const ref = document.getElementById('unlockRef').value;
+        if(!method) Swal.showValidationMessage("Please select a Method");
+        if(method !== 'Cash' && method !== 'AdminOverride' && !ref) Swal.showValidationMessage("Reference Number required for digital transfers");
+        return { method, referenceNo: ref };
+      }
+    });
+
+    if (formValues) {
+        Swal.fire({ title: 'Unlocking...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        try {
+            const r = await fetch(`${API}/api/files/unlock/${fileId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify(formValues)
+            });
+            const data = await r.json();
+            if (data.success) {
+                Swal.fire('Unlocked', 'File has been unlocked. Client can now download it from their Portal.', 'success');
+                fetchVaultData(activeVaultClientId);
+            } else {
+                Swal.fire('Error', data.error || 'Failed to unlock', 'error');
+            }
+        } catch(e) {
+            Swal.fire('Error', 'Connection failed', 'error');
+        }
     }
 }
 </script>

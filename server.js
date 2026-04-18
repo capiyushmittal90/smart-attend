@@ -234,7 +234,7 @@ const Todo = mongoose.model('Todo', todoSchema);
 
 // --- File Attachment (Input/Output) ---
 const fileSchema = new mongoose.Schema({
-    taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
+    taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task' }, // Optional now
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
     originalName: { type: String, required: true },
     filename: { type: String, required: true },
@@ -242,6 +242,18 @@ const fileSchema = new mongoose.Schema({
     folder: { type: String, enum: ['input', 'output'], required: true }, // 'input' from client, 'output' from staff
     uploadedBy: { type: String }, // 'Client' or specific staff ID
     uploadedByName: { type: String },
+    
+    // --- Paywall & Output Linking ---
+    linkedInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice' },
+    paymentLocked: { type: Boolean, default: false },
+    unlockDetails: {
+        method: { type: String }, // Cash, NEFT/RTGS, UPI, UTR
+        referenceNo: { type: String },
+        snapshotBase64: { type: String },
+        unlockedBy: { type: String },
+        unlockedAt: { type: Date }
+    },
+    
     createdAt: { type: Date, default: Date.now }
 });
 const FileAttachment = mongoose.model('FileAttachment', fileSchema);
@@ -2399,16 +2411,17 @@ app.delete('/api/templates/:id', moduleAuth('template-master', 'edit'), async (r
     }
 });
 
-// ============ FILE MANAGEMENT ============
+// ============ FILE MANAGEMENT & VAULT ============
 app.post('/api/files/upload', anyAuth, upload.single('file'), async (req, res) => {
     try {
+        // Normal upload (supports optional taskId)
         const { taskId, clientId, folder } = req.body;
-        if (!req.file || !taskId || !clientId || !folder) return res.status(400).json({ error: 'Missing required parameters' });
+        if (!req.file || !clientId || !folder) return res.status(400).json({ error: 'Missing required parameters' });
         
         let uploaderName = req.user.name || 'System';
         
         const fileRecord = await FileAttachment.create({
-            taskId,
+            taskId: taskId || undefined,
             clientId,
             originalName: req.file.originalname,
             filename: req.file.filename,
@@ -2423,6 +2436,52 @@ app.post('/api/files/upload', anyAuth, upload.single('file'), async (req, res) =
     }
 });
 
+// Staff API to upload Output and link an Invoice (Mandatory)
+app.post('/api/files/upload/output', anyAuth, upload.single('file'), async (req, res) => {
+    try {
+        const { clientId, linkedInvoiceId } = req.body;
+        if (!req.file || !clientId || !linkedInvoiceId) return res.status(400).json({ error: 'Missing file, client, or invoice' });
+
+        const invoice = await Invoice.findById(linkedInvoiceId);
+        if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+        
+        // Output gets locked immediately unless invoice is fully paid
+        const isPaid = invoice.status === 'Paid';
+
+        let uploaderName = req.user.name || 'System';
+        
+        const fileRecord = await FileAttachment.create({
+            clientId,
+            originalName: req.file.originalname,
+            filename: req.file.filename,
+            path: req.file.path,
+            folder: 'output',
+            uploadedBy: req.user.id,
+            uploadedByName: uploaderName,
+            linkedInvoiceId: invoice._id,
+            paymentLocked: !isPaid
+        });
+        res.json({ success: true, file: fileRecord });
+    } catch(err) {
+         res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/clients/:id/vault', anyAuth, async (req, res) => {
+    try {
+        const clientId = req.params.id;
+        if (req.user.type === 'client' && req.user.id !== clientId) {
+             return res.status(403).json({ error: 'Unauthorized to view this vault' });
+        }
+        
+        // Populate invoice data to show invoice details alongside locked output files
+        const files = await FileAttachment.find({ clientId }).populate('linkedInvoiceId', 'invoiceNo totalAmount status').sort({ createdAt: -1 });
+        res.json({ success: true, files });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/files/task/:taskId', anyAuth, async (req, res) => {
     try {
         const files = await FileAttachment.find({ taskId: req.params.taskId }).sort({ createdAt: -1 });
@@ -2432,12 +2491,60 @@ app.get('/api/files/task/:taskId', anyAuth, async (req, res) => {
     }
 });
 
+// Admin-only: Unlock a file manually providing payment evidence
+app.post('/api/files/unlock/:id', anyAuth, async (req, res) => {
+    try {
+        // Enforce Admin / Team Admin
+        let isAdmin = req.user.role === 'superadmin' || req.user.type === 'admin';
+        if (!isAdmin && req.user.type === 'employee') {
+             const staff = await Staff.findById(req.user.id);
+             if (staff && staff.isTeamAdmin) isAdmin = true;
+        }
+        if (!isAdmin) return res.status(403).json({ error: 'Only admins can unlock files' });
+
+        const { method, referenceNo, snapshotBase64 } = req.body;
+        if (!method) return res.status(400).json({ error: 'Payment method is required' });
+
+        const file = await FileAttachment.findById(req.params.id);
+        if(!file) return res.status(404).json({ error: 'File not found' });
+
+        file.paymentLocked = false;
+        file.unlockDetails = {
+            method,
+            referenceNo,
+            snapshotBase64,
+            unlockedBy: req.user.name || 'Admin',
+            unlockedAt: new Date()
+        };
+        await file.save();
+
+        res.json({ success: true, message: 'File access successfully unlocked' });
+    } catch(err) {
+         res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/files/download/:id', anyAuth, async (req, res) => {
     try {
-        const file = await FileAttachment.findById(req.params.id);
+        const file = await FileAttachment.findById(req.params.id).populate('linkedInvoiceId');
         if (!file) return res.status(404).send('File not found');
-        if (req.user.type === 'client' && file.clientId.toString() !== req.user.id) {
-             return res.status(403).send('Unauthorized');
+        
+        if (req.user.type === 'client') {
+             if (file.clientId.toString() !== req.user.id) {
+                 return res.status(403).send('Unauthorized');
+             }
+             // Paywall Enforcement
+             if (file.paymentLocked) {
+                 // Check if it's auto-unlocked via Invoice status changing recently
+                 if (file.linkedInvoiceId && file.linkedInvoiceId.status === 'Paid') {
+                     // We can let it through and silently unlock it
+                     file.paymentLocked = false;
+                     file.unlockDetails = { method: 'Auto', unlockedBy: 'System', unlockedAt: new Date() };
+                     await file.save();
+                 } else {
+                     return res.status(402).send('Payment Required - Please clear pending invoice to unlock this document.'); // 402 Payment Required
+                 }
+             }
         }
         res.download(file.path, file.originalName);
     } catch(err) {

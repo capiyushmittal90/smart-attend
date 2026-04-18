@@ -103,12 +103,72 @@
         </div>
     </div>
     
-    <!-- 2. Ongoing Projects / Pipeline -->
-    <h4 class="section-title mt-4"><i class="fa-solid fa-briefcase me-2 text-primary"></i>My Projects</h4>
+    <!-- 2. Global Data Vault -->
+    <h4 class="section-title mt-4 d-flex justify-content-between align-items-center">
+        <span><i class="fa-solid fa-vault me-2 text-primary"></i>My Data Vault</span>
+        <button class="btn btn-sm btn-navy fw-semibold" onclick="openGlobalVault()">
+            <i class="fa-solid fa-folder-open me-2"></i>Open Vault
+        </button>
+    </h4>
+    <div class="pipeline-wrapper text-center mb-5">
+        <div class="row align-items-center text-start">
+            <div class="col-md-8">
+                <h6 class="fw-bold mb-1">Centralised Document Storage</h6>
+                <p class="text-muted small mb-0">Upload your PAN, Aadhar, ITRs, Bills, or download final reports prepared by our team securely from your Vault.</p>
+            </div>
+            <div class="col-md-4 text-end">
+                 <button class="btn btn-outline-success px-4" onclick="openGlobalVault()"><i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload File</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Ongoing Projects / Pipeline -->
+    <h4 class="section-title mt-4"><i class="fa-solid fa-briefcase me-2 text-primary"></i>Service Pipeline</h4>
     <div id="projects-container">
         <!-- Rendered via JS -->
     </div>
     
+  </div>
+</div>
+
+<!-- Global Vault Modal -->
+<div class="modal fade" id="vaultModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content border-0" style="border-radius:16px;">
+      <div class="modal-header text-white" style="background:var(--navy);">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-vault me-2"></i>My Data Vault</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+          <div class="row g-0">
+              <!-- Inputs Folder (Left) -->
+              <div class="col-md-6 border-end p-4 bg-light">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i>I Uploaded (Inputs)</h6>
+                      <label class="btn btn-sm btn-navy fw-semibold mb-0" style="cursor:pointer;">
+                          <i class="fa-solid fa-plus me-1"></i> Upload
+                          <input type="file" style="display:none;" onchange="uploadClientGlobalFile(event)">
+                      </label>
+                  </div>
+                  <p class="small text-muted mb-4">You can safely upload PAN, Aadhar, Rent Deed, Bills, etc. here.</p>
+                  <div id="vaultInputsContainer" style="max-height:400px;overflow-y:auto;">
+                      <!-- Rendered Inputs -->
+                  </div>
+              </div>
+              
+              <!-- Outputs Folder (Right) -->
+              <div class="col-md-6 p-4">
+                  <div class="mb-3">
+                      <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-file-invoice text-success me-2"></i>Prepared For Me (Outputs)</h6>
+                  </div>
+                  <p class="small text-muted mb-4">Official documents and final workings delivered by BookMyCA.</p>
+                  <div id="vaultOutputsContainer" style="max-height:400px;overflow-y:auto;">
+                      <!-- Rendered Outputs -->
+                  </div>
+              </div>
+          </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -308,17 +368,127 @@ async function uploadClientFile(e, taskId) {
     try {
         const res = await fetch(`${API}/api/files/upload`, {
             method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token }, // No content-type needed for FormData
+            headers: { 'Authorization': 'Bearer ' + token }, 
             body: formData
         });
         const data = await res.json();
         
         if (data.success) {
-            Swal.fire('Success', 'File uploaded successfully and sent to the team.', 'success');
+            Swal.fire('Success', 'File uploaded successfully.', 'success');
         } else {
             Swal.fire('Error', data.error || 'Failed to upload', 'error');
         }
     } catch(err) {
+        Swal.fire('Error', 'Connection failed', 'error');
+    }
+}
+
+async function uploadClientGlobalFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+        Swal.fire('Too Large', 'File maximum limit is 10MB.', 'warning');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    // Notice: NO taskId provided, so it maps to the global data vault
+    formData.append('clientId', currentUser.id);
+    formData.append('folder', 'input'); 
+    
+    Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const res = await fetch(`${API}/api/files/upload`, {
+            method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            Swal.fire('Success', 'File uploaded to your Vault securely.', 'success');
+            openGlobalVault(); // Refresh vault
+        } else {
+            Swal.fire('Error', data.error || 'Failed to upload', 'error');
+        }
+    } catch(err) {
+        Swal.fire('Error', 'Connection failed', 'error');
+    }
+}
+
+async function openGlobalVault() {
+    const modal = new bootstrap.Modal(document.getElementById('vaultModal'));
+    const inBox = document.getElementById('vaultInputsContainer');
+    const outBox = document.getElementById('vaultOutputsContainer');
+    inBox.innerHTML = '<div class="text-center py-4"><span class="spinner-border text-primary"></span></div>';
+    outBox.innerHTML = '<div class="text-center py-4"><span class="spinner-border text-primary"></span></div>';
+    modal.show();
+    
+    try {
+        const res = await fetch(`${API}/api/clients/${currentUser.id}/vault`, { headers:{'Authorization': 'Bearer '+token} });
+        const data = await res.json();
+        if (data.success) {
+            const inputs = data.files.filter(f => f.folder === 'input');
+            const outputs = data.files.filter(f => f.folder === 'output');
+            
+            // Render Inputs
+            if (inputs.length === 0) {
+                inBox.innerHTML = `<div class="text-center py-4 text-muted"><i class="fa-regular fa-folder-open mb-2 fa-2x"></i><br><small>No files uploaded yet.</small></div>`;
+            } else {
+                inBox.innerHTML = inputs.map(f => `
+                <div class="file-item">
+                    <div class="file-icon" style="background:#F1F5F9;color:#64748B;"><i class="fa-solid fa-file"></i></div>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold text-dark text-truncate" style="font-size:0.85rem; max-width:200px;" title="${f.originalName}">${f.originalName}</div>
+                        <div class="text-muted" style="font-size:0.7rem;">${new Date(f.createdAt).toLocaleDateString()}</div>
+                    </div>
+                    <a href="${API}/api/files/download/${f._id}?token=${token}" target="_blank" class="btn btn-sm btn-light border me-1" title="Download"><i class="fa-solid fa-download text-primary"></i></a>
+                    <button class="btn btn-sm btn-light text-danger border" onclick="deleteGlobalFile('${f._id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </div>`).join('');
+            }
+            
+            // Render Outputs (With Paywall Logic)
+            if (outputs.length === 0) {
+                outBox.innerHTML = `<div class="text-center py-4 text-muted"><i class="fa-solid fa-box-open mb-2 fa-2x"></i><br><small>No delivered documents yet.</small></div>`;
+            } else {
+                outBox.innerHTML = outputs.map(f => {
+                    const isLocked = f.paymentLocked === true;
+                    const actionBtn = isLocked 
+                        ? `<button class="btn btn-sm" style="background:#FFFBEB;color:#D97706;border:1px solid #FCD34D" onclick="alert('Document Locked. Please contact Helpdesk or clear Invoice pending dues.')" title="Payment Required"><i class="fa-solid fa-lock me-1"></i>Locked</button>`
+                        : `<a href="${API}/api/files/download/${f._id}?token=${token}" target="_blank" class="btn btn-sm btn-success"><i class="fa-solid fa-download me-1"></i>Download</a>`;
+                        
+                    return `
+                    <div class="file-item" style="${isLocked ? 'opacity:0.8;' : ''}">
+                        <div class="file-icon" style="background:${isLocked?'#FEF2F2':'#ECFDF5'};color:${isLocked?'#EF4444':'#10B981'};"><i class="fa-solid fa-file-contract"></i></div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold text-dark text-truncate" style="font-size:0.85rem; max-width:200px;" title="${f.originalName}">${f.originalName}</div>
+                            <div class="text-muted" style="font-size:0.7rem;">From ${f.uploadedByName}</div>
+                            ${isLocked && f.linkedInvoiceId ? `<div class="text-danger fw-bold" style="font-size:0.65rem;">INVOICE: ${f.linkedInvoiceId.invoiceNo} (${f.linkedInvoiceId.status})</div>` : ''}
+                        </div>
+                        ${actionBtn}
+                    </div>`;
+                }).join('');
+            }
+        } else {
+            inBox.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+            outBox.innerHTML = '';
+        }
+    } catch(err) {
+        inBox.innerHTML = `<div class="alert alert-danger">Network Error</div>`;
+    }
+}
+
+async function deleteGlobalFile(id) {
+    if (!confirm('Delete this file permanently?')) return;
+    try {
+        const res = await fetch(`${API}/api/files/${id}`, { method:'DELETE', headers:{'Authorization': 'Bearer '+token} });
+        const data = await res.json();
+        if (data.success) {
+            openGlobalVault();
+        } else {
+            Swal.fire('Error', data.error, 'error');
+        }
+    } catch(e) {
         Swal.fire('Error', 'Connection failed', 'error');
     }
 }
