@@ -2770,6 +2770,73 @@ try {
         } catch(e) { console.error('Todo reminder error:', e.message); }
     }, { timezone: 'Asia/Kolkata' });
     console.log('⏰ Todo reminder cron scheduled (daily 9 AM IST)');
+    
+    // ============ SUNDAY AUTO-BACKUP EMAIL ============
+    cron.schedule('59 23 * * 0', async () => {
+        console.log('📦 Starting Weekly Sunday Database Backup...');
+        try {
+            // Fetch everything
+            const admins = await Admin.find({});
+            const staff = await Staff.find({});
+            const clients = await Client.find({});
+            const tasks = await Task.find({});
+            const attendance = await AttendanceLog.find({});
+            const leaves = await LeaveRequest.find({});
+            const todos = await Todo.find({});
+            const invoices = await Invoice.find({});
+            const payments = await Payment.find({});
+            
+            const backupData = {
+                timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+                collections: {
+                    Admins: admins,
+                    Staff: staff,
+                    Clients: clients,
+                    Tasks: tasks,
+                    AttendanceLogs: attendance,
+                    LeaveRequests: leaves,
+                    Todos: todos,
+                    Invoices: invoices,
+                    Payments: payments
+                }
+            };
+
+            const jsonStr = JSON.stringify(backupData, null, 2);
+            const buffer = Buffer.from(jsonStr, 'utf-8');
+            
+            const transporter = nodemailer.createTransport({ 
+                service: 'gmail', 
+                auth: { user: SMTP_USER, pass: SMTP_PASS } 
+            });
+            
+            const dateStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+            await transporter.sendMail({
+                from: `"${SENDER_NAME}" <${SMTP_USER}>`,
+                to: 'capiyushmittal90@gmail.com',  
+                subject: `🗄️ Weekly Database Backup: SmartAttend (${dateStr})`,
+                html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;background:#0F172A;color:#E2E8F0;border-radius:12px;padding:24px;">
+                    <h2 style="color:#38BDF8;">🗄️ Automated Sunday Backup</h2>
+                    <p>Hi Piyush, your entire MongoDB database has been successfully backed up!</p>
+                    <p>Find the attached <b>JSON</b> file containing your full application state (Attendance, Staff, Clients, Payroll, Todos, Tasks & Invoices). Keep this file safe.</p>
+                    <hr style="border:1px solid #1E293B;margin:20px 0;">
+                    <p style="font-size:12px;color:#64748B;">Generated on: ${dateStr}</p>
+                </div>`,
+                attachments: [
+                    {
+                        filename: `smartattend_backup_${Date.now()}.json`,
+                        content: buffer
+                    }
+                ]
+            });
+            console.log(`✅ Sunday Database Backup sent successfully to capiyushmittal90@gmail.com`);
+
+        } catch (err) {
+            console.error('❌ Backup cron job failed:', err.message);
+        }
+    }, { timezone: 'Asia/Kolkata' });
+    console.log('⏰ Weekly DB Backup cron scheduled (Sunday 11:59 PM IST)');
+
 } catch(e) { console.warn('node-cron not available:', e.message); }
 
 // ============ START SERVER ============
