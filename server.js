@@ -1381,7 +1381,7 @@ app.get('/api/clients', anyAuth, async (req, res) => {
             ];
         }
 
-        let hasFullAccess = req.user.role === 'superadmin';
+        let hasFullAccess = req.user.role === 'superadmin' || req.user.type === 'admin';
         let hasEditAccess = hasFullAccess;
 
         // Check if the user is a staff member with explicit RBAC permissions
