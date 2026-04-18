@@ -282,6 +282,7 @@ async function loadStates() {
 }
 
 let hasFullAccess = false;
+let hasEditAccess = false;
 
 async function loadClients() {
   $('#loader').show(); $('#tblWrap').hide();
@@ -290,13 +291,19 @@ async function loadClients() {
     const data = await r.json();
     allClients = data.clients || [];
     hasFullAccess = data.fullAccess === true;
+    hasEditAccess = data.canEdit === true;
     
     // Hide/show security-sensitive UI based on access
     if (!hasFullAccess) {
-      // Hide download/export buttons
+      // Hide download/export buttons completely
       document.querySelectorAll('.export-btn, .download-btn').forEach(el => el.style.display = 'none');
     }
     
+    // If they cannot edit (even if they have full read access), hide the 'Add Client' button
+    if (!hasEditAccess) {
+        document.querySelectorAll('[onclick="openModal()"]').forEach(el => el.style.display = 'none');
+    }
+
     renderStats(allClients);
     renderTable(allClients);
   } catch(e) { Swal.fire('Error','Could not load clients','error'); }
@@ -318,7 +325,9 @@ function renderTable(clients) {
     const svcs = (c.serviceCategories||[]).map(s => `<span class="svc-tag">${s}</span>`).join('');
     
     if (hasFullAccess) {
-      // Superadmin: full data
+      // Superadmin or RBAC user with full data access
+      const editBtn = hasEditAccess ? `<button class="btn btn-sm btn-out-navy me-1" onclick="editClient('${c._id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>` : '';
+      
       body.append(`<tr>
         <td class="fw-semibold text-muted small">${c.clientCode||'—'}</td>
         <td>
@@ -332,7 +341,7 @@ function renderTable(clients) {
         <td>${svcs||'<span class="text-muted small">—</span>'}</td>
         <td>
           <button class="btn btn-sm btn-out-navy me-1" onclick="viewClient('${c._id}')" title="View"><i class="fa-solid fa-eye"></i></button>
-          <button class="btn btn-sm btn-out-navy me-1" onclick="editClient('${c._id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          ${editBtn}
           <button class="btn btn-sm btn-outline-success" onclick="loginAsClient('${c._id}')" title="Login as Client (Proxy)"><i class="fa-solid fa-arrow-right-to-bracket"></i></button>
         </td>
       </tr>`);
@@ -481,7 +490,12 @@ function viewClient(id) {
       </div>
     </div>
   `;
-  document.getElementById('btnEditFromView').onclick = () => editClient(id);
+  if (hasEditAccess) {
+      document.getElementById('btnEditFromView').onclick = () => editClient(id);
+      document.getElementById('btnEditFromView').style.display = 'inline-block';
+  } else {
+      document.getElementById('btnEditFromView').style.display = 'none';
+  }
   new bootstrap.Modal(document.getElementById('viewModal')).show();
 }
 

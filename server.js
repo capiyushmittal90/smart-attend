@@ -1364,7 +1364,7 @@ async function getNextSequence(name) {
 
 // ── CLIENT ROUTES ──────────────────────────────────────────────
 
-// List all clients — superadmin gets full data, others get limited fields
+// List all clients — superadmin gets full data, and employees with RBAC access to 'clientMaster'
 app.get('/api/clients', anyAuth, async (req, res) => {
     try {
         const { search, active } = req.query;
@@ -1381,18 +1381,33 @@ app.get('/api/clients', anyAuth, async (req, res) => {
             ];
         }
 
-        const isSuperAdmin = req.user.role === 'superadmin';
+        let hasFullAccess = req.user.role === 'superadmin';
+        let hasEditAccess = hasFullAccess;
+
+        // Check if the user is a staff member with explicit RBAC permissions
+        if (!hasFullAccess && req.user.type === 'employee') {
+            const staff = await Staff.findById(req.user.id);
+            if (staff && staff.permissions && staff.permissions.modules) {
+                const clientMod = staff.permissions.modules.find(m => m.name === 'clientMaster');
+                if (clientMod && clientMod.read) {
+                    hasFullAccess = true;
+                }
+                if (clientMod && clientMod.edit) {
+                    hasEditAccess = true;
+                }
+            }
+        }
         
-        if (isSuperAdmin) {
-            // Full access
+        if (hasFullAccess) {
+            // Full access granted via Superadmin OR RBAC Role
             const clients = await Client.find(filter).sort({ clientName: 1 });
-            res.json({ success: true, clients, fullAccess: true });
+            res.json({ success: true, clients, fullAccess: true, canEdit: hasEditAccess });
         } else {
-            // Limited: only name, trade name, code, _id, serviceCategories
+            // Limited: only minimal fields, no editing
             const clients = await Client.find(filter)
                 .select('_id clientCode clientName tradeName gstin serviceCategories isActive')
                 .sort({ clientName: 1 });
-            res.json({ success: true, clients, fullAccess: false });
+            res.json({ success: true, clients, fullAccess: false, canEdit: false });
         }
     } catch (err) {
         res.status(500).json({ error: err.message });
