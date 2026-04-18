@@ -425,13 +425,76 @@ async function saveInvoice(sendStatus) {
           method:'POST', headers:{Authorization:'Bearer '+token}
         });
       }
-      Swal.fire({ title:'Invoice Created!', html:`<strong>${data.invoice.invoiceNo}</strong><br>Total: ${INR(data.invoice.totalAmount)}`, icon:'success', confirmButtonColor:'#0F172A', confirmButtonText:'Download PDF' }).then(() => {
-        downloadPDF(data.invoice);
+      
+      const invId = data.invoice._id;
+      const cId = data.invoice.clientId;
+
+      Swal.fire({ 
+          title:'Invoice Created!', 
+          html:`<strong>${data.invoice.invoiceNo}</strong><br>Total: ${INR(data.invoice.totalAmount)}<br><p class="mt-3 small text-muted">Do you want to upload the Final Output File linked to this Invoice now?</p>`, 
+          icon:'success', 
+          showDenyButton: true,
+          showCancelButton: true,
+          confirmButtonColor:'#16A34A', 
+          denyButtonColor: '#0F172A',
+          confirmButtonText:'<i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload Output',
+          denyButtonText: '<i class="fa-solid fa-file-pdf me-1"></i> Just Download PDF',
+          cancelButtonText: 'Close'
+      }).then((result) => {
+          if (result.isDenied) {
+              downloadPDF(data.invoice);
+          } else if (result.isConfirmed) {
+              // They want to upload an output right here!
+              promptOutputUploadInline(cId, invId);
+          }
       });
     } else {
       Swal.fire('Failed', data.error||'Could not create invoice.','error');
     }
   } catch(e) { Swal.fire('Error','Server unreachable.','error'); }
+}
+
+// ── Direct Output Upload Post-Invoice ────────────────────────────
+async function promptOutputUploadInline(clientId, invoiceId) {
+    if (!clientId) {
+        return Swal.fire('Notice', 'This Invoice is for a Walk-in Custom Client. Output File vault is only available for registered Master Clients.', 'info');
+    }
+
+    const { value: file } = await Swal.fire({
+      title: 'Upload Final Output',
+      text: 'Select the file to deliver. It will be payment-locked for the client automatically.',
+      input: 'file',
+      inputAttributes: {
+        'accept': '*/*',
+        'aria-label': 'Upload your output document'
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Upload & Lock',
+      confirmButtonColor: '#16A34A'
+    });
+
+    if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('clientId', clientId);
+        formData.append('linkedInvoiceId', invoiceId);
+        
+        Swal.fire({ title: 'Uploading Output...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        try {
+            const r = await fetch(`${API}/api/files/upload/output`, {
+                method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: formData
+            });
+            const data = await r.json();
+            if (data.success) {
+                Swal.fire('Success', 'Output Uploaded! It is now locked securely in the Client Vault.', 'success');
+            } else {
+                Swal.fire('Error', data.error || 'Failed to upload', 'error');
+            }
+        } catch(e) {
+            Swal.fire('Error', 'Connection failed', 'error');
+        }
+    }
 }
 
 // ── Live Preview ─────────────────────────────────────────────────
