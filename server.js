@@ -2134,7 +2134,7 @@ app.get('/api/invoices', anyAuth, async (req, res) => {
 });
 
 // ── Upload External Invoice ───────────────────────────────────────
-app.post('/api/invoices/external', anyAuth, fileUpload.single('file'), async (req, res) => {
+app.post('/api/invoices/external', anyAuth, upload.single('file'), async (req, res) => {
     try {
         const { clientId, invoiceNo, totalAmount } = req.body;
         if (!clientId || !invoiceNo || !totalAmount) return res.status(400).json({ error: 'Missing required invoice details' });
