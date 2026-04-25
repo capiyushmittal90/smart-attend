@@ -35,7 +35,7 @@
     <div class="d-flex gap-2">
       <a href="task-portal.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-briefcase me-1"></i>Tasks</a>
       <a href="client-master.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-address-book me-1"></i>Clients</a>
-      <a href="index.html" class="btn btn-sm btn-outline-light"><i class="fa-solid fa-shield-halved me-1"></i>Hub</a>
+      <a href="index.html" class="btn btn-sm btn-outline-light" id="navHubBtn"><i class="fa-solid fa-house me-1"></i>Back to Hub</a>
     </div>
   </div>
 </nav>
@@ -190,6 +190,16 @@ const FIRM = { name:'Aayu Consulting Group Pvt Ltd', address:'11-K-3 Sahkar Marg
 window.addEventListener('DOMContentLoaded', async () => {
   token = localStorage.getItem('sa_token');
   if (!token) { window.location.href='index.html'; return; }
+  
+  // Detect role & update navbar hub link accordingly
+  try {
+    const userObj = JSON.parse(localStorage.getItem('sa_user') || '{}');
+    if (userObj.type === 'employee') {
+      // Employee: Hub button goes back to index.html#emp-dashboard
+      const hubBtn = document.getElementById('navHubBtn');
+      if (hubBtn) { hubBtn.href = 'index.html'; hubBtn.innerHTML = '<i class="fa-solid fa-arrow-left me-1"></i>My Dashboard'; }
+    }
+  } catch(e) {}
   document.getElementById('agStart').valueAsDate = new Date();
   const end = new Date(); end.setFullYear(end.getFullYear()+1);
   document.getElementById('agEnd').valueAsDate = end;
