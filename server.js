@@ -139,7 +139,7 @@ const DeptWorkList = mongoose.model('DeptWorkList', deptWorkListSchema);
 const resetTokenSchema = new mongoose.Schema({
     email: { type: String, required: true },
     token: { type: String, required: true },
-    type: { type: String, enum: ['admin', 'employee', 'client'], default: 'employee' },
+    type: { type: String, enum: ['admin', 'superadmin', 'employee', 'client'], default: 'employee' },
     expiresAt: { type: Date, required: true },
     createdAt: { type: Date, default: Date.now }
 });
@@ -539,7 +539,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
         res.json({ success: true, message: 'OTP sent to your email', userType });
     } catch (err) {
-        console.error('Forgot password error:', err);
+        console.error('\n===== FORGOT PASSWORD ERROR =====');
+        console.error('Message:', err.message);
+        console.error('Stack:', err.stack);
+        console.error('=================================\n');
         res.status(500).json({ error: 'Failed to send OTP: ' + err.message });
     }
 });
