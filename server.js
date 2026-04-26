@@ -333,19 +333,40 @@ async function seedDefaults() {
 seedDefaults();
 
 // ============ SMTP TRANSPORTER ============
+// Using Gmail service mode — more reliable on cloud hosting (Railway)
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    service: 'gmail',
     auth: { user: SMTP_USER, pass: SMTP_PASS },
     tls: { rejectUnauthorized: false },
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 8000
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000
 });
-transporter.verify((err) => {
-    // Disabled verify on startup to prevent potential Railway timeouts/restarts
-    // if (err) console.warn('⚠️ SMTP verify failed:', err.message);
+transporter.verify((err, ok) => {
+    if (err) {
+        console.error('⚠️ SMTP verify FAILED on startup:', err.message);
+    } else {
+        console.log('✅ SMTP ready — Gmail connected as', SMTP_USER);
+    }
+});
+
+// ──────────────────────────────────────────────────────────────
+// DEBUG ROUTE — Test SMTP from Railway (remove after debug done)
+// Usage: GET /api/test-smtp?to=youremail@gmail.com
+// ──────────────────────────────────────────────────────────────
+app.get('/api/test-smtp', async (req, res) => {
+    const to = req.query.to || SMTP_USER;
+    try {
+        const info = await transporter.sendMail({
+            from: `"BookMyCA Test" <${SMTP_USER}>`,
+            to,
+            subject: '✅ SMTP Test from Railway',
+            text: 'If you see this, SMTP is working correctly on Railway!'
+        });
+        res.json({ success: true, messageId: info.messageId, to });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message, code: err.code, command: err.command });
+    }
 });
 
 // ============ OTP STORE (in-memory) ============
