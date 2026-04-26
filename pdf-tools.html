@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookmyca | PDF Tools</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --navy:    #0F172A;
+      --navy-h:  #1E293B;
+      --accent:  #38BDF8;
+      --bg:      #F1F5F9;
+      --border:  #E2E8F0;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: #334155; margin: 0; }
+
+    /* Navbar */
+    .navbar { background: var(--navy) !important; }
+    .logo-box { width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--navy);font-size:1rem; }
+
+    /* Attendance quick-link button */
+    .att-link { background:#0EA5E9;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.8rem;font-weight:600;text-decoration:none;transition:background .2s; }
+    .att-link:hover { background:#0284C7;color:#fff; }
+
+    /* PDF iframe container */
+    .iframe-container {
+      width: 100%;
+      height: calc(100vh - 64px - 2rem); /* 64px for navbar, 2rem for padding */
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      background: #0a0a1a;
+    }
+    .pdf-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ───── NAVBAR ───── -->
+<nav class="navbar navbar-expand-lg navbar-dark py-2 shadow-sm">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="index.html">
+      <div class="logo-box"><i class="fa-solid fa-file-pdf"></i></div>
+      <span class="fw-bold fs-5">Bookmyca <span class="text-white-50 fw-light">PDF Tools</span></span>
+    </a>
+    <div class="d-flex align-items-center gap-3 text-white">
+      <a href="index.html#attendance" class="att-link"><i class="fa-solid fa-fingerprint me-1"></i>Attendance</a>
+      <a href="client-master.html" class="att-link" style="background:#6366F1;"><i class="fa-solid fa-address-book me-1"></i>Clients</a>
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-circle-user fs-4"></i>
+        <div>
+          <div class="fw-semibold small" id="userName">Loading…</div>
+          <div class="text-white-50" style="font-size:.7rem;" id="userCode"></div>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline-light" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4 py-3">
+  <!-- IFRAME CONTAINER -->
+  <div class="iframe-container">
+    <iframe src="pdf-toolkit/index.html" class="pdf-iframe" title="PDF Toolkit"></iframe>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  let token = '';
+
+  window.addEventListener('DOMContentLoaded', () => {
+    token = localStorage.getItem('sa_token');
+    if (!token) { window.location.href = 'index.html'; return; }
+
+    // Decode JWT payload to show name
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      document.getElementById('userName').textContent = payload.name || payload.email || 'Employee';
+      document.getElementById('userCode').textContent = payload.code || payload.dept || '';
+    } catch(_) {}
+  });
+
+  function logout() {
+    localStorage.removeItem('sa_token');
+    window.location.href = 'index.html';
+  }
+</script>
+<script src="sidebar.js"></script>
+</body>
+</html>

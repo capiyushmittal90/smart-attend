@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookMyCA - All-in-One PDF Toolkit</title>
+    <meta name="description" content="BookMyCA - Free online PDF tools. Merge, split, compress, convert, edit, sign, and secure your PDFs.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- PDF Libraries via CDN -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- HEADER -->
+    <header class="header" id="header">
+        <div class="header-inner">
+            <a href="#" class="logo" id="logo-link">
+                <div class="logo-icon">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
+                        <path d="M8 10h10a4 4 0 010 8H8V10z" fill="white" opacity="0.9" />
+                        <path d="M8 14h12a4 4 0 010 8H8V14z" fill="white" opacity="0.6" />
+                        <defs>
+                            <linearGradient id="logo-grad" x1="0" y1="0" x2="32" y2="32">
+                                <stop stop-color="#6366f1" />
+                                <stop offset="1" stop-color="#ec4899" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <span class="logo-text">BookMyCA</span>
+            </a>
+            <nav class="nav-categories" id="nav-categories">
+                <button class="nav-btn active" data-category="all">All Tools</button>
+                <button class="nav-btn" data-category="organize">Organize</button>
+                <button class="nav-btn" data-category="optimize">Optimize</button>
+                <button class="nav-btn" data-category="convert">Convert</button>
+                <button class="nav-btn" data-category="edit">Edit</button>
+                <button class="nav-btn" data-category="security">Security</button>
+            </nav>
+            <button class="mobile-menu-btn" id="mobile-menu-btn">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section class="hero" id="hero-section">
+        <div class="hero-bg">
+            <div class="hero-orb hero-orb-1"></div>
+            <div class="hero-orb hero-orb-2"></div>
+            <div class="hero-orb hero-orb-3"></div>
+        </div>
+        <div class="hero-content">
+            <h1 class="hero-title">Every PDF tool you need,<br><span class="gradient-text">all in one place</span></h1>
+            <p class="hero-subtitle">Merge, split, compress, convert, edit & sign PDFs. 100% free, 100% private — all processing happens right in your browser.</p>
+            <div class="hero-stats">
+                <div class="stat"><span class="stat-num">27+</span><span class="stat-label">PDF Tools</span></div>
+                <div class="stat"><span class="stat-num">100%</span><span class="stat-label">Private</span></div>
+                <div class="stat"><span class="stat-num">0</span><span class="stat-label">Server Uploads</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TOOLS GRID -->
+    <main class="main-content" id="main-content">
+        <div class="tools-grid" id="tools-grid"></div>
+    </main>
+
+    <!-- TOOL WORKSPACE (hidden by default) -->
+    <section class="tool-workspace" id="tool-workspace" style="display:none;">
+        <div class="workspace-header">
+            <button class="back-btn" id="back-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                Back to Tools
+            </button>
+        </div>
+        <div class="workspace-content" id="workspace-content"></div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <span class="logo-text">BookMyCA</span>
+                <p>Your complete PDF toolkit. All processing happens in your browser — your files never leave your device.</p>
+            </div>
+            <div class="footer-links">
+                <div class="footer-col">
+                    <h4>PDF Tools</h4>
+                    <a href="#merge-pdf">Merge PDF</a>
+                    <a href="#split-pdf">Split PDF</a>
+                    <a href="#compress-pdf">Compress PDF</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Convert</h4>
+                    <a href="#pdf-to-word">PDF to Word</a>
+                    <a href="#pdf-to-jpg">PDF to JPG</a>
+                    <a href="#word-to-pdf">Word to PDF</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Security</h4>
+                    <a href="#protect-pdf">Protect PDF</a>
+                    <a href="#unlock-pdf">Unlock PDF</a>
+                    <a href="#sign-pdf">Sign PDF</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 BookMyCA. All rights reserved. Your files never leave your browser.</p>
+        </div>
+    </footer>
+
+    <!-- TOAST NOTIFICATION -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html>

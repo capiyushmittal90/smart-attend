@@ -43,6 +43,7 @@ window.initGlobalSidebar = function() {
         { name: 'Agreement Gen',    url: 'agreement-builder.html',icon: 'fa-file-signature',     permKey: 'agreement-builder' },
         { name: 'Template Master',  url: 'template-master.html',  icon: 'fa-cog',                permKey: 'template-master' },
         { name: 'Ad Master',        url: 'ad-master.html',        icon: 'fa-bullhorn',           permKey: 'ad-master' },
+        { name: 'PDF Tools',        url: 'pdf-tools.html',        icon: 'fa-file-pdf',           permKey: null },
         { name: 'Attendance',       url: 'index.html#attendance', icon: 'fa-clock',              permKey: 'attendance' },
     ];
 
