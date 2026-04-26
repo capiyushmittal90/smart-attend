@@ -778,6 +778,99 @@ body {
     background: rgba(231, 76, 60, 0.08);
 }
 
+/* ── Staff Avatar on Card ── */
+.staff-avatar-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+.staff-avatar-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #38BDF8;
+    display: block;
+}
+.staff-avatar-initials {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0F172A, #1E293B);
+    color: #38BDF8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+/* ── Docs Button ── */
+.staff-card .btn-card-action.docs:hover {
+    color: #2563EB;
+    background: rgba(37,99,235,0.08);
+}
+
+/* ── Staff Documents Modal ── */
+.doc-item-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 16px 18px;
+}
+.doc-item-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.doc-item-title {
+    font-weight: 700;
+    font-size: .95rem;
+    color: #0F172A;
+}
+.doc-item-sub {
+    font-size: .75rem;
+    margin-top: 2px;
+}
+.doc-preview-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 36px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.doc-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.doc-file-input {
+    flex: 1;
+    font-size: .8rem;
+    border: 1px dashed #CBD5E1;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #fff;
+    cursor: pointer;
+    min-width: 0;
+}
+.doc-view-btn {
+    display: inline-block;
+    padding: 4px 14px;
+    background: #0F172A;
+    color: #fff !important;
+    border-radius: 6px;
+    font-size: .78rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .2s;
+    white-space: nowrap;
+}
+.doc-view-btn:hover { background: #1E293B; }
+
+
 .staff-card .card-checkbox {
     position: absolute;
     bottom: 12px;

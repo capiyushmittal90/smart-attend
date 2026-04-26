@@ -117,6 +117,13 @@ const staffSchema = new mongoose.Schema({
         canAssignTask: { type: Boolean, default: false },
         canUploadOutput: { type: Boolean, default: true }
     },
+    // Staff Documents (HR Files)
+    documents: {
+        photo:     { type: String, default: null },   // visible to employee + admin
+        pan:       { type: String, default: null },   // admin only
+        aadhar:    { type: String, default: null },   // admin only
+        agreement: { type: String, default: null }    // admin only
+    },
     createdAt: { type: Date, default: Date.now }
 });
 const Staff = mongoose.model('Staff', staffSchema);
@@ -739,6 +746,57 @@ app.post('/api/staff/bulk/delete', adminAuth, async (req, res) => {
     if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'IDs required' });
     await Staff.updateMany({ _id: { $in: ids } }, { active: false });
     res.json({ success: true, count: ids.length });
+});
+
+// ─── Staff Documents (Upload) — Admin Only ───
+app.post('/api/staff/:id/documents', adminAuth, upload.fields([
+    { name: 'photo',     maxCount: 1 },
+    { name: 'pan',       maxCount: 1 },
+    { name: 'aadhar',   maxCount: 1 },
+    { name: 'agreement', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const staff = await Staff.findById(req.params.id);
+        if (!staff) return res.status(404).json({ error: 'Staff not found' });
+        const updates = {};
+        const files = req.files || {};
+        if (files.photo)     updates['documents.photo']     = '/uploads/' + files.photo[0].filename;
+        if (files.pan)       updates['documents.pan']       = '/uploads/' + files.pan[0].filename;
+        if (files.aadhar)    updates['documents.aadhar']    = '/uploads/' + files.aadhar[0].filename;
+        if (files.agreement) updates['documents.agreement'] = '/uploads/' + files.agreement[0].filename;
+        const updated = await Staff.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
+        res.json({ success: true, documents: updated.documents });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Upload failed' });
+    }
+});
+
+// ─── Get All Staff Documents — Admin Only ───
+app.get('/api/staff/:id/documents', adminAuth, async (req, res) => {
+    try {
+        const staff = await Staff.findById(req.params.id).select('documents name code');
+        if (!staff) return res.status(404).json({ error: 'Staff not found' });
+        res.json({ success: true, documents: staff.documents || {}, name: staff.name, code: staff.code });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ─── Get Staff Photo Only — Employee (own) or Admin ───
+app.get('/api/staff/:id/photo', anyAuth, async (req, res) => {
+    try {
+        const user = req.user;
+        // Employees can only see their own photo
+        if (user.role === 'employee' && user.id.toString() !== req.params.id.toString()) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        const staff = await Staff.findById(req.params.id).select('documents.photo');
+        if (!staff) return res.status(404).json({ error: 'Staff not found' });
+        res.json({ success: true, photo: staff.documents?.photo || null });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // ============ ATTENDANCE ROUTES ============

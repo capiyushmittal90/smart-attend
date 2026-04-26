@@ -112,6 +112,7 @@ function initEmpDashboard() {
     document.getElementById('emp-welcome-code').textContent = currentUser.code;
     document.getElementById('emp-welcome-dept').textContent = currentUser.dept;
     document.getElementById('emp-welcome-shift').textContent = currentUser.shift || 'General';
+    loadEmpProfilePhoto(); // Load profile photo (non-blocking)
     loadEmpTodayStatus();
     loadEmpRecentLogs();
     loadEmpLeaves();
@@ -684,20 +685,27 @@ async function loadStaffList() {
         const bulkToolbar = document.getElementById('bulk-toolbar');
         bulkToolbar.style.display = staff.length > 0 ? 'flex' : 'none';
         if (staff.length === 0) { container.innerHTML = '<p class="empty-msg">No staff registered yet.</p>'; return; }
-        container.innerHTML = staff.map((emp, i) => `
+        container.innerHTML = staff.map((emp, i) => {
+            const initials = emp.name.trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+            const avatarHtml = emp.documents?.photo
+                ? `<img src="${emp.documents.photo}" alt="${emp.name}" class="staff-avatar-img">`
+                : `<div class="staff-avatar-initials">${initials}</div>`;
+            return `
             <div class="staff-card" data-id="${emp._id}">
                 <div class="card-actions">
                     <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}', ${emp.baseSalary || 0})" title="Edit">✏️</button>
+                    <button class="btn-card-action docs" onclick="openStaffDocs('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')">📎</button>
                     <button class="btn-card-action delete" onclick="removeStaff('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')" title="Remove">✕</button>
                 </div>
+                <div class="staff-avatar-wrap">${avatarHtml}</div>
                 <div class="emp-code">${emp.code}</div>
                 <div class="emp-name">${emp.name}</div>
                 <div class="emp-dept">${emp.dept}</div>
                 <div class="emp-email">📧 ${emp.email}</div>
                 <div class="emp-shift">🕐 ${emp.shift || 'General'}</div>
                 <input type="checkbox" class="card-checkbox" data-id="${emp._id}" onchange="onCardCheckChange(this)">
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     } catch (err) {
         toast('Failed to load staff', 'error');
     }
@@ -1339,5 +1347,119 @@ async function generateSalaryReport() {
         toast('❌ ' + err.message, 'error');
     } finally {
         loading.style.display = 'none';
+    }
+}
+
+// ================================================================
+// ============ STAFF DOCUMENTS MODULE ============================
+// ================================================================
+
+let currentDocsStaffId = null;
+
+async function openStaffDocs(staffId, staffName) {
+    currentDocsStaffId = staffId;
+    const modal = document.getElementById('modal-staff-docs');
+    if (!modal) return;
+    document.getElementById('docs-modal-title').textContent = `📎 Documents — ${staffName}`;
+    // Reset all previews
+    ['photo','pan','aadhar','agreement'].forEach(t => {
+        const el = document.getElementById(`doc-preview-${t}`);
+        if (el) el.innerHTML = '<span style="color:#94A3B8;font-size:.85rem;">⏳ Loading…</span>';
+        const inp = document.getElementById(`doc-input-${t}`);
+        if (inp) inp.value = '';
+    });
+    modal.style.display = 'flex';
+    try {
+        const data = await api('GET', `/api/staff/${staffId}/documents`);
+        if (data.success) {
+            const docs = data.documents || {};
+            renderDocPreview('photo',     docs.photo,     'image');
+            renderDocPreview('pan',       docs.pan,       'doc');
+            renderDocPreview('aadhar',    docs.aadhar,    'doc');
+            renderDocPreview('agreement', docs.agreement, 'doc');
+        }
+    } catch (err) {
+        toast('Failed to load documents', 'error');
+    }
+}
+
+function renderDocPreview(type, url, kind) {
+    const el = document.getElementById(`doc-preview-${type}`);
+    if (!el) return;
+    if (!url) {
+        el.innerHTML = '<span style="color:#94A3B8;font-size:.85rem;">❌ Not uploaded yet</span>';
+        return;
+    }
+    if (kind === 'image') {
+        el.innerHTML = `
+            <img src="${url}" alt="Photo" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid #38BDF8;">
+            <a href="${url}" target="_blank" class="doc-view-btn">👁️ View Photo</a>`;
+    } else {
+        const ext = url.split('.').pop().toLowerCase();
+        const icon = ext === 'pdf' ? '📄' : '🖼️';
+        el.innerHTML = `
+            <span style="color:#10B981;font-weight:600;">✅ Uploaded</span>
+            <a href="${url}" target="_blank" class="doc-view-btn">${icon} View / Download</a>`;
+    }
+}
+
+async function uploadStaffDoc(type) {
+    const input = document.getElementById(`doc-input-${type}`);
+    const file = input ? input.files[0] : null;
+    if (!file) { toast('Please select a file first', 'warning'); return; }
+    if (!currentDocsStaffId) return;
+    // Find the clicked button
+    const btn = event.target;
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Uploading…';
+    const formData = new FormData();
+    formData.append(type, file);
+    try {
+        const resp = await fetch(`/api/staff/${currentDocsStaffId}/documents`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + authToken },
+            body: formData
+        });
+        const data = await resp.json();
+        if (data.success) {
+            toast(`${type.charAt(0).toUpperCase()+type.slice(1)} uploaded ✓`, 'success');
+            const kind = type === 'photo' ? 'image' : 'doc';
+            renderDocPreview(type, data.documents[type], kind);
+            // Refresh staff list to update avatar on card
+            loadStaffList();
+        } else {
+            toast('Upload failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (err) {
+        toast('Network error during upload', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
+    }
+}
+
+function closeStaffDocsModal() {
+    const modal = document.getElementById('modal-staff-docs');
+    if (modal) modal.style.display = 'none';
+    currentDocsStaffId = null;
+}
+
+// ─── Employee Profile Photo Loader ───
+async function loadEmpProfilePhoto() {
+    if (!currentUser || currentUser.type !== 'employee') return;
+    const avatar = document.getElementById('emp-profile-avatar');
+    if (!avatar) return;
+    try {
+        const data = await api('GET', `/api/staff/${currentUser._id}/photo`);
+        if (data.photo) {
+            avatar.innerHTML = `<img src="${data.photo}" alt="Profile" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid rgba(56,189,248,0.7);box-shadow:0 0 0 4px rgba(56,189,248,0.15);">`;
+        } else {
+            const initials = (currentUser.name||'E').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+            avatar.innerHTML = `<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0EA5E9,#38BDF8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;border:3px solid rgba(56,189,248,0.5);">${initials}</div>`;
+        }
+    } catch (e) {
+        const initials = (currentUser?.name||'E').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+        if (avatar) avatar.innerHTML = `<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0EA5E9,#38BDF8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;">${initials}</div>`;
     }
 }

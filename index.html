@@ -109,9 +109,12 @@
     <section id="screen-emp-dashboard" class="screen">
         <div class="layout-split">
             <aside class="sidebar">
-                <div class="sidebar-brand">
-                    <span class="sidebar-icon">👤</span>
-                    <h2><span id="emp-welcome-name">Employee</span></h2>
+                <div class="sidebar-brand" style="text-align:center;">
+                    <div id="emp-profile-avatar" style="margin:0 auto 10px;display:flex;justify-content:center;">
+                        <!-- Profile photo or initials loaded by JS -->
+                        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#0EA5E9,#38BDF8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;">👤</div>
+                    </div>
+                    <h2 style="margin:0;"><span id="emp-welcome-name">Employee</span></h2>
                 </div>
                 <div class="emp-info-sidebar">
                     <p>Code: <strong id="emp-welcome-code">—</strong></p>
@@ -825,6 +828,83 @@
                 </table>
             </div>
             <p id="payroll-loading" style="text-align:center; display:none;">Calculating strictly by 8-hour metrics...</p>
+        </div>
+    </div>
+
+    <!-- ============ MODAL: STAFF DOCUMENTS ============ -->
+    <div id="modal-staff-docs" class="modal-overlay" style="display:none;">
+        <div class="modal-content glass" style="max-width:560px;padding:28px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;">
+                <h2 id="docs-modal-title" style="margin:0;font-size:1.1rem;">📎 Staff Documents</h2>
+                <button class="btn-ghost" onclick="closeStaffDocsModal()">✖</button>
+            </div>
+            <div style="display:grid;gap:14px;">
+
+                <!-- Photo -->
+                <div class="doc-item-card">
+                    <div class="doc-item-header">
+                        <span style="font-size:1.4rem;">📷</span>
+                        <div>
+                            <div class="doc-item-title">Profile Photo</div>
+                            <div class="doc-item-sub" style="color:#10B981;">✅ Visible to Employee + Admin</div>
+                        </div>
+                    </div>
+                    <div id="doc-preview-photo" class="doc-preview-area"></div>
+                    <div class="doc-upload-row">
+                        <input type="file" id="doc-input-photo" accept="image/*" class="doc-file-input">
+                        <button class="btn btn-primary btn-sm" onclick="uploadStaffDoc('photo')">⬆️ Upload</button>
+                    </div>
+                </div>
+
+                <!-- PAN -->
+                <div class="doc-item-card">
+                    <div class="doc-item-header">
+                        <span style="font-size:1.4rem;">🪪</span>
+                        <div>
+                            <div class="doc-item-title">PAN Card</div>
+                            <div class="doc-item-sub" style="color:#F59E0B;">🔒 Admin Access Only</div>
+                        </div>
+                    </div>
+                    <div id="doc-preview-pan" class="doc-preview-area"></div>
+                    <div class="doc-upload-row">
+                        <input type="file" id="doc-input-pan" accept="image/*,application/pdf" class="doc-file-input">
+                        <button class="btn btn-primary btn-sm" onclick="uploadStaffDoc('pan')">⬆️ Upload</button>
+                    </div>
+                </div>
+
+                <!-- Aadhar -->
+                <div class="doc-item-card">
+                    <div class="doc-item-header">
+                        <span style="font-size:1.4rem;">🪪</span>
+                        <div>
+                            <div class="doc-item-title">Aadhar Card</div>
+                            <div class="doc-item-sub" style="color:#F59E0B;">🔒 Admin Access Only</div>
+                        </div>
+                    </div>
+                    <div id="doc-preview-aadhar" class="doc-preview-area"></div>
+                    <div class="doc-upload-row">
+                        <input type="file" id="doc-input-aadhar" accept="image/*,application/pdf" class="doc-file-input">
+                        <button class="btn btn-primary btn-sm" onclick="uploadStaffDoc('aadhar')">⬆️ Upload</button>
+                    </div>
+                </div>
+
+                <!-- Agreement -->
+                <div class="doc-item-card">
+                    <div class="doc-item-header">
+                        <span style="font-size:1.4rem;">📄</span>
+                        <div>
+                            <div class="doc-item-title">Staff Agreement</div>
+                            <div class="doc-item-sub" style="color:#F59E0B;">🔒 Admin Access Only</div>
+                        </div>
+                    </div>
+                    <div id="doc-preview-agreement" class="doc-preview-area"></div>
+                    <div class="doc-upload-row">
+                        <input type="file" id="doc-input-agreement" accept="image/*,application/pdf" class="doc-file-input">
+                        <button class="btn btn-primary btn-sm" onclick="uploadStaffDoc('agreement')">⬆️ Upload</button>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
