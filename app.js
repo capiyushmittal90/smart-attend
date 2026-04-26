@@ -457,7 +457,87 @@ async function adminLogin() {
     }
 }
 
+// ─── Forgot Password Flow ───
+function showForgotPassword() {
+    const box = document.getElementById('forgotPwdBox');
+    if (!box) return;
+    // Reset to step 1
+    const s1 = document.getElementById('fpStep1');
+    const s2 = document.getElementById('fpStep2');
+    if (s1) s1.style.display = '';
+    if (s2) s2.style.display = 'none';
+    const emailEl = document.getElementById('fp-email');
+    if (emailEl) emailEl.value = '';
+    box.style.display = box.style.display === 'none' ? '' : 'none';
+}
+
+async function sendForgotOTP() {
+    const emailEl = document.getElementById('fp-email');
+    const email = emailEl ? emailEl.value.trim() : '';
+    if (!email) { toast('Please enter your email address', 'warning'); return; }
+
+    const btn = document.getElementById('fpSendBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+
+    try {
+        const data = await api('POST', '/api/auth/forgot-password', { email });
+        if (data.success) {
+            toast('✅ OTP sent to your email! Check inbox.', 'success');
+            // Move to step 2
+            const s1 = document.getElementById('fpStep1');
+            const s2 = document.getElementById('fpStep2');
+            if (s1) s1.style.display = 'none';
+            if (s2) s2.style.display = '';
+            // Store email for reset step
+            window._forgotEmail = email;
+        }
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📩 Send OTP'; }
+    }
+}
+
+async function resetPassword() {
+    const otp = (document.getElementById('fp-otp')?.value || '').trim();
+    const newPass = (document.getElementById('fp-newpass')?.value || '').trim();
+    const email = window._forgotEmail || '';
+
+    if (!otp || otp.length < 6) { toast('Enter the 6-digit OTP from email', 'warning'); return; }
+    if (!newPass || newPass.length < 4) { toast('New password must be at least 4 characters', 'warning'); return; }
+    if (!email) { toast('Session expired. Please start again.', 'error'); return; }
+
+    const btn = document.getElementById('fpResetBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Resetting…'; }
+
+    try {
+        const data = await api('POST', '/api/auth/reset-password', { email, otp, newPassword: newPass });
+        if (data.success) {
+            toast('✅ Password reset successfully! Please log in.', 'success');
+            // Hide forgot password box and go back to login
+            const box = document.getElementById('forgotPwdBox');
+            if (box) box.style.display = 'none';
+            window._forgotEmail = null;
+            // Clear fields
+            const otpEl = document.getElementById('fp-otp');
+            const passEl = document.getElementById('fp-newpass');
+            if (otpEl) otpEl.value = '';
+            if (passEl) passEl.value = '';
+            // Show step 1 again for next time
+            const s1 = document.getElementById('fpStep1');
+            const s2 = document.getElementById('fpStep2');
+            if (s1) s1.style.display = '';
+            if (s2) s2.style.display = 'none';
+        }
+    } catch (err) {
+        toast('❌ ' + err.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔓 Reset Password'; }
+    }
+}
+
 // ============ ADMIN PORTAL ============
+
 function initAdminPortal() {
     if (!currentUser || currentUser.type !== 'admin') { showScreen('screen-main'); return; }
     
