@@ -59,8 +59,6 @@ function logout() {
     showScreen('screen-main');
 }
 
-}
-
 // ============ PUSH NOTIFICATIONS ============
 const VAPID_PUBLIC_KEY = 'BPB2UOrCQQ9SfBbmNxTM4Yvcd8GB_nDg8v1LPpBOpRKtreK8JE_keabQSSnVrkW7CA0urYqfiM_h4qERCzGN3gA';
 
