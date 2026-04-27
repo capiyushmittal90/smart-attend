@@ -20,7 +20,7 @@
       --border:  #E2E8F0;
     }
     *, *::before, *::after { box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; background: var(--bg); color: #334155; margin: 0; }
+    body { font-family: 'Inter', sans-serif; background: #0a0a1a; color: #334155; margin: 0; }
 
     /* Navbar */
     .navbar { background: var(--navy) !important; }
@@ -33,10 +33,9 @@
     /* PDF iframe container */
     .iframe-container {
       width: 100%;
-      height: calc(100vh - 64px - 2rem); /* 64px for navbar, 2rem for padding */
-      border-radius: 16px;
+      height: calc(100vh - 64px); /* 64px for navbar */
+      border-radius: 0;
       overflow: hidden;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       background: #0a0a1a;
     }
     .pdf-iframe {
@@ -70,7 +69,7 @@
   </div>
 </nav>
 
-<div class="container-fluid px-4 py-3">
+<div class="container-fluid p-0">
   <!-- IFRAME CONTAINER -->
   <div class="iframe-container">
     <iframe src="pdf-toolkit/index.html" class="pdf-iframe" title="PDF Toolkit"></iframe>

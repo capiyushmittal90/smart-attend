@@ -2,7 +2,7 @@
    BookMyCA Smart Attend — Service Worker v3
    ============================================= */
 
-const CACHE_NAME = 'smartattend-v5';
+const CACHE_NAME = 'smartattend-v6';
 const ASSETS = [
     '/',
     '/index.html',
