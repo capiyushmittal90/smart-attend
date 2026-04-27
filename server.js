@@ -30,16 +30,9 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
-    }
-});
-const upload = multer({ storage: storage });
+// Configure multer for memory storage (Railway ephemeral disk fix)
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit per file
 
 const app = express();
 app.use(cors());
@@ -784,10 +777,16 @@ app.post('/api/staff/:id/documents', adminAuth, upload.fields([
         if (!staff) return res.status(404).json({ error: 'Staff not found' });
         const updates = {};
         const files = req.files || {};
-        if (files.photo)     updates['documents.photo']     = '/uploads/' + files.photo[0].filename;
-        if (files.pan)       updates['documents.pan']       = '/uploads/' + files.pan[0].filename;
-        if (files.aadhar)    updates['documents.aadhar']    = '/uploads/' + files.aadhar[0].filename;
-        if (files.agreement) updates['documents.agreement'] = '/uploads/' + files.agreement[0].filename;
+        
+        const fileToBase64 = (fileArray) => {
+            if (!fileArray || !fileArray[0]) return null;
+            return `data:${fileArray[0].mimetype};base64,${fileArray[0].buffer.toString('base64')}`;
+        };
+
+        if (files.photo)     updates['documents.photo']     = fileToBase64(files.photo);
+        if (files.pan)       updates['documents.pan']       = fileToBase64(files.pan);
+        if (files.aadhar)    updates['documents.aadhar']    = fileToBase64(files.aadhar);
+        if (files.agreement) updates['documents.agreement'] = fileToBase64(files.agreement);
         const updated = await Staff.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true });
         res.json({ success: true, documents: updated.documents });
     } catch (err) {
