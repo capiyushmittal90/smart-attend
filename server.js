@@ -23,6 +23,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const multer = require('multer');
+const webpush = require('web-push');
 
 // Configure upload directory
 const uploadDir = path.join(__dirname, 'uploads');
@@ -48,6 +49,10 @@ const SMTP_PASS = process.env.SMTP_PASS || 'lgmdsljuffuenvrw';
 const SENDER_NAME = process.env.SENDER_NAME || 'BookMyCA Smart Attend';
 const JWT_SECRET = process.env.JWT_SECRET || 'smartattend_secret_key_2024';
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/smartattend';
+
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails('mailto:admin@bookmyca.com', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+}
 
 // ============ MONGODB CONNECTION ============
 mongoose.connect(MONGO_URI)
@@ -117,6 +122,7 @@ const staffSchema = new mongoose.Schema({
         aadhar:    { type: String, default: null },   // admin only
         agreement: { type: String, default: null }    // admin only
     },
+    pushSubscriptions: { type: Array, default: [] },
     createdAt: { type: Date, default: Date.now }
 });
 const Staff = mongoose.model('Staff', staffSchema);
@@ -389,6 +395,54 @@ function authMiddleware(requiredRole) {
 
 const adminAuth = authMiddleware('admin');
 const anyAuth = authMiddleware(null);
+
+// ============ PUSH NOTIFICATIONS ============
+async function sendPushNotification(staffIdOrIds, payload) {
+    if (!process.env.VAPID_PUBLIC_KEY) return;
+    const ids = Array.isArray(staffIdOrIds) ? staffIdOrIds : [staffIdOrIds];
+    const staffs = await Staff.find({ _id: { $in: ids } });
+    
+    for (const staff of staffs) {
+        if (!staff.pushSubscriptions || staff.pushSubscriptions.length === 0) continue;
+        const validSubs = [];
+        for (const sub of staff.pushSubscriptions) {
+            try {
+                await webpush.sendNotification(sub, JSON.stringify(payload));
+                validSubs.push(sub);
+            } catch (err) {
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                    console.log(`[Push] Subscription expired/invalid for ${staff.name}, removing it.`);
+                } else {
+                    validSubs.push(sub);
+                    console.error('[Push] Error:', err);
+                }
+            }
+        }
+        if (validSubs.length !== staff.pushSubscriptions.length) {
+            staff.pushSubscriptions = validSubs;
+            await staff.save();
+        }
+    }
+}
+
+app.post('/api/notifications/subscribe', anyAuth, async (req, res) => {
+    try {
+        const subscription = req.body;
+        if (!subscription || !subscription.endpoint) return res.status(400).json({ error: 'Invalid subscription' });
+        
+        const staff = await Staff.findById(req.user.id);
+        if (!staff) return res.status(404).json({ error: 'User not found' });
+        
+        staff.pushSubscriptions = (staff.pushSubscriptions || []).filter(sub => sub.endpoint !== subscription.endpoint);
+        staff.pushSubscriptions.push(subscription);
+        await staff.save();
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
 
 // ============ AUTH ROUTES ============
 

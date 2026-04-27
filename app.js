@@ -59,6 +59,45 @@ function logout() {
     showScreen('screen-main');
 }
 
+}
+
+// ============ PUSH NOTIFICATIONS ============
+const VAPID_PUBLIC_KEY = 'BPB2UOrCQQ9SfBbmNxTM4Yvcd8GB_nDg8v1LPpBOpRKtreK8JE_keabQSSnVrkW7CA0urYqfiM_h4qERCzGN3gA';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+  return outputArray;
+}
+
+async function initPushNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        
+        if (!sub) {
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+                sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                });
+            }
+        }
+        
+        if (sub) {
+            await api('POST', '/api/notifications/subscribe', sub);
+            console.log('[Push] Subscribed successfully');
+        }
+    } catch (err) {
+        console.error('Push Notifications Error:', err);
+    }
+}
+
 // ============ SCREEN MANAGEMENT ============
 function showScreen(id) {
     stopCamera();
@@ -97,6 +136,7 @@ async function empLogin(e) {
         
         toast(`Welcome, ${currentUser.name}! ✓`, 'success');
         showScreen('screen-emp-dashboard');
+        initPushNotifications();
     } catch (err) {
         toast('❌ ' + err.message, 'error');
     } finally {
@@ -452,6 +492,7 @@ async function adminLogin() {
         document.getElementById('admin-email').value = '';
         document.getElementById('admin-pass').value = '';
         showScreen('screen-admin-portal');
+        initPushNotifications();
     } catch (err) {
         toast('❌ ' + err.message, 'error');
     }
@@ -1350,6 +1391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             showScreen('screen-emp-dashboard');
         }
+        initPushNotifications(); // Prompt for notifications on dashboard load
     } else {
         showScreen('screen-main');
     }
