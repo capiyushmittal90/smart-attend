@@ -416,6 +416,15 @@
                             <div class="mc-arrow" style="color:#34d399;">→</div>
                         </a>
 
+                        <div class="module-card mc-admin admin-only-card" style="background: linear-gradient(135deg, #d97706, #92400e); color:white; cursor:pointer;" onclick="switchTab('leaderboard')">
+                            <div class="mc-icon-ring" style="background: rgba(255,255,255,0.1); color: #fbbf24;"><span>🏆</span></div>
+                            <div class="mc-info">
+                                <h3 style="color:white;">Top Performers</h3>
+                                <p style="color:#fde68a;">Employee of the Month Leaderboard</p>
+                            </div>
+                            <div class="mc-arrow" style="color:#fbbf24;">→</div>
+                        </div>
+
                     </div>
                 </div>
 
@@ -799,6 +808,42 @@
                     </div>
                     <h3 class="section-heading" style="margin-top: 24px;">Current Admins</h3>
                     <div id="admin-list" class="staff-grid"></div>
+                </div>
+
+                <!-- ======== TAB: LEADERBOARD ======== -->
+                <div id="tab-leaderboard" class="tab-panel">
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                        <button class="btn btn-sm" onclick="switchTab('dashboard')" style="background:none;border:1px solid #CBD5E1;color:#475569;font-weight:600;padding:6px 16px;border-radius:8px;cursor:pointer;">← Back to Hub</button>
+                        <h2 class="page-title" style="margin:0;">🏆 Top Performers (Employee of the Month)</h2>
+                    </div>
+                    
+                    <div class="filter-bar glass" style="margin-bottom: 20px;">
+                        <div class="filter-group" style="flex-grow: 0; min-width: 150px;">
+                            <label>Select Month</label>
+                            <input type="month" id="leaderboard-month" class="form-input" onchange="loadLeaderboard()">
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="loadLeaderboard()" style="margin-top: 24px;">📊 Generate Report</button>
+                    </div>
+
+                    <div class="table-wrapper glass">
+                        <table class="att-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Employee</th>
+                                    <th>Total Score</th>
+                                    <th>8+ Hrs Days</th>
+                                    <th>On-Time IN</th>
+                                    <th>Routines Done</th>
+                                    <th>To-Do Done</th>
+                                    <th>Tasks Done</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboard-tbody">
+                                <tr><td colspan="8" class="empty-msg">Select a month and generate the report.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
             </main>

@@ -624,6 +624,14 @@ function switchTab(name) {
     if (name === 'leaves') loadLeaveRequests();
     if (name === 'settings') loadSettingsUI();
     if (name === 'admins') loadAdminList();
+    if (name === 'leaderboard') {
+        const d = new Date();
+        const monthInput = document.getElementById('leaderboard-month');
+        if (!monthInput.value) {
+            monthInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+        loadLeaderboard();
+    }
 }
 
 // Attendance sub-navigation handler
@@ -1204,6 +1212,50 @@ async function handleLeave(id, status) {
         loadLeaveRequests();
         loadDashboard();
     } catch (err) { toast('❌ ' + err.message, 'error'); }
+}
+
+// ============ LEADERBOARD ============
+async function loadLeaderboard() {
+    const tbody = document.getElementById('leaderboard-tbody');
+    const monthVal = document.getElementById('leaderboard-month').value;
+    if (!monthVal) {
+        toast('Please select a month', 'warning');
+        return;
+    }
+    const [year, month] = monthVal.split('-');
+
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">⏳ Calculating scores... Please wait.</td></tr>';
+
+    try {
+        const data = await api('GET', `/api/superadmin/leaderboard?month=${month}&year=${year}`);
+        const leaderboard = data.leaderboard || [];
+
+        if (leaderboard.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">No data found for this month.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = leaderboard.map((emp, i) => {
+            const rankBadge = i === 0 ? '🏆 1st' : i === 1 ? '🥈 2nd' : i === 2 ? '🥉 3rd' : `#${i + 1}`;
+            return `
+                <tr style="${i < 3 ? 'background: rgba(251, 191, 36, 0.05); font-weight: 500;' : ''}">
+                    <td style="font-size: 1.1rem;">${rankBadge}</td>
+                    <td>
+                        <strong>${emp.name}</strong><br>
+                        <small style="color: #64748b;">${emp.dept} | ${emp.code}</small>
+                    </td>
+                    <td><span class="badge" style="background:#fbbf24;color:#78350f;font-size:1rem;">${emp.score} pts</span></td>
+                    <td>${emp.stats.eightHourDays} <small class="text-muted">(x10)</small></td>
+                    <td>${emp.stats.onTimeCount} <small class="text-muted">(x5)</small></td>
+                    <td>${emp.stats.routinesCompleted} <small class="text-muted">(x5)</small></td>
+                    <td>${emp.stats.todosCompleted} <small class="text-muted">(x2)</small></td>
+                    <td>${emp.stats.tasksCompleted} <small class="text-muted">(x10)</small></td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-msg" style="color:red;">Error: ${err.message}</td></tr>`;
+    }
 }
 
 // ============ SETTINGS ============

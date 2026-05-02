@@ -766,6 +766,96 @@ app.put('/api/superadmin/dept-work/:dept', superadminAuth, async (req, res) => {
     }
 });
 
+// Employee of the Month Leaderboard
+app.get('/api/superadmin/leaderboard', superadminAuth, async (req, res) => {
+    try {
+        const { month, year } = req.query;
+        const targetDate = new Date();
+        const targetMonth = month ? parseInt(month) : targetDate.getMonth() + 1;
+        const targetYear = year ? parseInt(year) : targetDate.getFullYear();
+
+        const startDate = new Date(targetYear, targetMonth - 1, 1);
+        const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+        const staffList = await Staff.find({ active: true }).lean();
+        const leaderboard = [];
+
+        for (const emp of staffList) {
+            let score = 0;
+            const stats = {
+                onTimeCount: 0,
+                eightHourDays: 0,
+                routinesCompleted: 0,
+                todosCompleted: 0,
+                tasksCompleted: 0
+            };
+
+            const onTimeLogs = await AttendanceLog.countDocuments({
+                staffId: emp._id,
+                type: 'IN',
+                status: 'ON TIME',
+                timestamp: { $gte: startDate.getTime(), $lte: endDate.getTime() }
+            });
+            stats.onTimeCount = onTimeLogs;
+            score += onTimeLogs * 5;
+
+            const outLogs = await AttendanceLog.find({
+                staffId: emp._id,
+                type: 'OUT',
+                timestamp: { $gte: startDate.getTime(), $lte: endDate.getTime() }
+            });
+            for (const log of outLogs) {
+                if (log.status && log.status.includes('h')) {
+                    const hoursMatch = log.status.match(/(\d+)h/);
+                    if (hoursMatch && parseInt(hoursMatch[1]) >= 8) {
+                        stats.eightHourDays++;
+                        score += 10;
+                    }
+                }
+            }
+
+            const routines = await DailyRoutineLog.countDocuments({
+                staffId: emp._id,
+                completed: true,
+                timestamp: { $gte: startDate, $lte: endDate }
+            });
+            stats.routinesCompleted = routines;
+            score += routines * 5;
+
+            const todos = await Todo.countDocuments({
+                staffId: emp._id,
+                status: 'done',
+                completedAt: { $gte: startDate, $lte: endDate }
+            });
+            stats.todosCompleted = todos;
+            score += todos * 2;
+
+            const tasks = await Task.countDocuments({
+                staffId: emp._id,
+                workStatus: 'Completed',
+                updatedAt: { $gte: startDate, $lte: endDate }
+            });
+            stats.tasksCompleted = tasks;
+            score += tasks * 10;
+
+            leaderboard.push({
+                _id: emp._id,
+                name: emp.name,
+                code: emp.code,
+                dept: emp.dept,
+                photo: emp.documents?.photo || null,
+                score,
+                stats
+            });
+        }
+
+        leaderboard.sort((a, b) => b.score - a.score);
+        res.json({ success: true, leaderboard: leaderboard.slice(0, 10) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============ STAFF ROUTES (Admin only) ============
 
 app.get('/api/staff', adminAuth, async (req, res) => {
