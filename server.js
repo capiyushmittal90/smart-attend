@@ -123,6 +123,8 @@ const staffSchema = new mongoose.Schema({
         agreement: { type: String, default: null }    // admin only
     },
     pushSubscriptions: { type: Array, default: [] },
+    joinDate: { type: Date, default: null },
+    resignDate: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now }
 });
 const Staff = mongoose.model('Staff', staffSchema);
@@ -472,6 +474,14 @@ app.post('/api/auth/employee-login', async (req, res) => {
     const staff = await Staff.findOne({ email: email.toLowerCase(), active: true });
     if (!staff) return res.status(404).json({ error: 'Employee not found. Contact admin.' });
 
+    if (staff.resignDate) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        if (new Date(staff.resignDate) <= todayStart) {
+            return res.status(403).json({ error: 'Access revoked. Your account has been disabled due to resignation.' });
+        }
+    }
+
     // Fallback to '1234' if the database document was created before the password field existed
     const validPassword = staff.password || '1234';
     if (password !== validPassword) {
@@ -759,12 +769,21 @@ app.put('/api/superadmin/dept-work/:dept', superadminAuth, async (req, res) => {
 // ============ STAFF ROUTES (Admin only) ============
 
 app.get('/api/staff', adminAuth, async (req, res) => {
-    const staff = await Staff.find({ active: true }).sort({ createdAt: -1 });
+    const query = { active: true };
+    if (req.query.all !== 'true') {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        query.$or = [
+            { resignDate: null },
+            { resignDate: { $gt: todayStart } }
+        ];
+    }
+    const staff = await Staff.find(query).sort({ createdAt: -1 });
     res.json(staff);
 });
 
 app.post('/api/staff', adminAuth, async (req, res) => {
-    const { code, name, dept, email, shift, password, baseSalary } = req.body;
+    const { code, name, dept, email, shift, password, baseSalary, joinDate, resignDate } = req.body;
     if (!code || !name || !dept || !email) return res.status(400).json({ error: 'All fields required' });
     const exists = await Staff.findOne({ code: code.toUpperCase() });
     if (exists) return res.status(409).json({ error: 'Employee code already exists' });
@@ -775,7 +794,9 @@ app.post('/api/staff', adminAuth, async (req, res) => {
         email: email.toLowerCase(), 
         shift: shift || 'General',
         password: password || '1234',
-        baseSalary: Number(baseSalary) || 0
+        baseSalary: Number(baseSalary) || 0,
+        joinDate: joinDate ? new Date(joinDate) : null,
+        resignDate: resignDate ? new Date(resignDate) : null
     });
     res.json({ success: true, staff });
 });
@@ -795,14 +816,18 @@ app.post('/api/staff/bulk', adminAuth, async (req, res) => {
 });
 
 app.put('/api/staff/:id', adminAuth, async (req, res) => {
-    const { name, dept, email, shift, baseSalary } = req.body;
-    const staff = await Staff.findByIdAndUpdate(req.params.id, { 
+    const { name, dept, email, shift, baseSalary, joinDate, resignDate } = req.body;
+    const updateData = { 
         name, 
         dept, 
         email: email?.toLowerCase(), 
         shift,
         baseSalary: Number(baseSalary) || 0
-    }, { new: true });
+    };
+    if (joinDate !== undefined) updateData.joinDate = joinDate ? new Date(joinDate) : null;
+    if (resignDate !== undefined) updateData.resignDate = resignDate ? new Date(resignDate) : null;
+
+    const staff = await Staff.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!staff) return res.status(404).json({ error: 'Employee not found' });
     res.json({ success: true, staff });
 });

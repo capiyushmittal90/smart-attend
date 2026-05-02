@@ -798,7 +798,7 @@ function renderAbsentList(data) {
 // ============ STAFF MANAGEMENT ============
 async function loadStaffList() {
     try {
-        const staff = await api('GET', '/api/staff');
+        const staff = await api('GET', '/api/staff?all=true');
         document.getElementById('staff-count-badge').textContent = staff.length;
         const container = document.getElementById('staff-list');
         const bulkToolbar = document.getElementById('bulk-toolbar');
@@ -812,13 +812,16 @@ async function loadStaffList() {
             return `
             <div class="staff-card" data-id="${emp._id}">
                 <div class="card-actions">
-                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}', ${emp.baseSalary || 0})" title="Edit">✏️</button>
+                    <button class="btn-card-action edit" onclick="openEditModal('${emp._id}', '${emp.code}', '${emp.name.replace(/'/g, "\\'")}', '${emp.dept.replace(/'/g, "\\'")}', '${emp.email}', '${emp.shift || 'General'}', ${emp.baseSalary || 0}, '${emp.joinDate ? emp.joinDate.split('T')[0] : ''}', '${emp.resignDate ? emp.resignDate.split('T')[0] : ''}')" title="Edit">✏️</button>
                     <button class="btn-card-action docs" onclick="openStaffDocs('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')">📎</button>
                     <button class="btn-card-action delete" onclick="removeStaff('${emp._id}', '${emp.name.replace(/'/g, "\\'")}')" title="Remove">✕</button>
                 </div>
                 <div class="staff-avatar-wrap">${avatarHtml}</div>
                 <div class="emp-code">${emp.code}</div>
-                <div class="emp-name">${emp.name}</div>
+                <div class="emp-name">
+                    ${emp.name}
+                    ${emp.resignDate && new Date(emp.resignDate) <= new Date() ? '<br><span class="badge badge-absent" style="font-size:0.6rem;margin-top:2px;">RESIGNED</span>' : ''}
+                </div>
                 <div class="emp-dept">${emp.dept}</div>
                 <div class="emp-email">📧 ${emp.email}</div>
                 <div class="emp-shift">🕐 ${emp.shift || 'General'}</div>
@@ -839,6 +842,8 @@ async function addStaff(e) {
     const password = document.getElementById('emp-password').value.trim();
     const baseSalary = document.getElementById('emp-salary').value.trim();
     const shift = document.getElementById('emp-shift-select')?.value || 'General';
+    const joinDate = document.getElementById('emp-join')?.value || '';
+    const resignDate = document.getElementById('emp-resign')?.value || '';
     
     if (!code || !name || !dept || !email) { toast('All fields required', 'warning'); return false; }
 
@@ -846,7 +851,7 @@ async function addStaff(e) {
     btn.disabled = true; btn.textContent = '⏳ Adding…';
 
     try {
-        await api('POST', '/api/staff', { code, name, dept, email, password, baseSalary, shift });
+        await api('POST', '/api/staff', { code, name, dept, email, password, baseSalary, shift, joinDate, resignDate });
         toast(`${name} added ✓`, 'success');
         document.getElementById('staff-form').reset();
         loadStaffList();
@@ -867,7 +872,7 @@ async function removeStaff(id, name) {
     } catch (err) { toast('❌ ' + err.message, 'error'); }
 }
 
-function openEditModal(id, code, name, dept, email, shift, baseSalary) {
+function openEditModal(id, code, name, dept, email, shift, baseSalary, joinDate, resignDate) {
     document.getElementById('edit-id').value = id;
     document.getElementById('edit-code').value = code;
     document.getElementById('edit-name').value = name;
@@ -875,6 +880,8 @@ function openEditModal(id, code, name, dept, email, shift, baseSalary) {
     document.getElementById('edit-email').value = email;
     document.getElementById('edit-shift').value = shift || 'General';
     document.getElementById('edit-salary').value = baseSalary || 0;
+    document.getElementById('edit-join').value = joinDate || '';
+    document.getElementById('edit-resign').value = resignDate || '';
     document.getElementById('edit-modal').style.display = 'flex';
 }
 function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
@@ -886,10 +893,12 @@ async function saveEdit() {
     const email = document.getElementById('edit-email').value.trim();
     const shift = document.getElementById('edit-shift').value;
     const baseSalary = document.getElementById('edit-salary').value;
+    const joinDate = document.getElementById('edit-join').value;
+    const resignDate = document.getElementById('edit-resign').value;
     if (!name || !dept || !email) { toast('All fields required', 'warning'); return; }
 
     try {
-        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift, baseSalary });
+        await api('PUT', `/api/staff/${id}`, { name, dept, email, shift, baseSalary, joinDate, resignDate });
         toast(`${name} updated ✓`, 'success');
         closeEditModal(); loadStaffList();
     } catch (err) { toast('❌ ' + err.message, 'error'); }
@@ -939,7 +948,7 @@ function downloadSampleExcel() {
 
 async function exportStaffExcel() {
     try {
-        const staff = await api('GET', '/api/staff');
+        const staff = await api('GET', '/api/staff?all=true');
         if (staff.length === 0) { toast('No staff to export', 'warning'); return; }
         const data = staff.map(emp => ({ 'Employee Code': emp.code, 'Full Name': emp.name, 'Department': emp.dept, 'Email': emp.email, 'Shift': emp.shift }));
         const ws = XLSX.utils.json_to_sheet(data);
@@ -1061,7 +1070,7 @@ async function loadReports() {
 
 async function populateFilterDropdowns() {
     try {
-        const staff = await api('GET', '/api/staff');
+        const staff = await api('GET', '/api/staff?all=true');
         const empSel = document.getElementById('filter-employee');
         if (empSel && empSel.options.length <= 1) {
             staff.forEach(emp => {
