@@ -807,9 +807,15 @@ app.get('/api/superadmin/leaderboard', superadminAuth, async (req, res) => {
             for (const log of outLogs) {
                 if (log.status && log.status.includes('h')) {
                     const hoursMatch = log.status.match(/(\d+)h/);
-                    if (hoursMatch && parseInt(hoursMatch[1]) >= 8) {
-                        stats.eightHourDays++;
-                        score += 10;
+                    if (hoursMatch) {
+                        const hours = parseInt(hoursMatch[1]);
+                        if (hours >= 8) {
+                            stats.eightHourDays++;
+                            score += 5;
+                            if (hours > 8) {
+                                score += (hours - 8);
+                            }
+                        }
                     }
                 }
             }
@@ -820,7 +826,7 @@ app.get('/api/superadmin/leaderboard', superadminAuth, async (req, res) => {
                 timestamp: { $gte: startDate, $lte: endDate }
             });
             stats.routinesCompleted = routines;
-            score += routines * 5;
+            score += routines * 2;
 
             const todos = await Todo.countDocuments({
                 staffId: emp._id,
@@ -828,7 +834,7 @@ app.get('/api/superadmin/leaderboard', superadminAuth, async (req, res) => {
                 completedAt: { $gte: startDate, $lte: endDate }
             });
             stats.todosCompleted = todos;
-            score += todos * 2;
+            score += todos * 1;
 
             const tasks = await Task.countDocuments({
                 staffId: emp._id,
@@ -836,7 +842,7 @@ app.get('/api/superadmin/leaderboard', superadminAuth, async (req, res) => {
                 updatedAt: { $gte: startDate, $lte: endDate }
             });
             stats.tasksCompleted = tasks;
-            score += tasks * 10;
+            score += tasks * 5;
 
             leaderboard.push({
                 _id: emp._id,

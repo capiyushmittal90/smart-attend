@@ -1245,11 +1245,11 @@ async function loadLeaderboard() {
                         <small style="color: #64748b;">${emp.dept} | ${emp.code}</small>
                     </td>
                     <td><span class="badge" style="background:#fbbf24;color:#78350f;font-size:1rem;">${emp.score} pts</span></td>
-                    <td>${emp.stats.eightHourDays} <small class="text-muted">(x10)</small></td>
+                    <td>${emp.stats.eightHourDays} <small class="text-muted">(x5+)</small></td>
                     <td>${emp.stats.onTimeCount} <small class="text-muted">(x5)</small></td>
-                    <td>${emp.stats.routinesCompleted} <small class="text-muted">(x5)</small></td>
-                    <td>${emp.stats.todosCompleted} <small class="text-muted">(x2)</small></td>
-                    <td>${emp.stats.tasksCompleted} <small class="text-muted">(x10)</small></td>
+                    <td>${emp.stats.routinesCompleted} <small class="text-muted">(x2)</small></td>
+                    <td>${emp.stats.todosCompleted} <small class="text-muted">(x1)</small></td>
+                    <td>${emp.stats.tasksCompleted} <small class="text-muted">(x5)</small></td>
                 </tr>
             `;
         }).join('');
